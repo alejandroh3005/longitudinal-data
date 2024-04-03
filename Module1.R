@@ -1,4 +1,6 @@
 ## Module 1 Code
+# Written by Gary Chan, edited by Alejandro Hernandez
+# Mar 28, 2024
 
 library(tidyverse)
 library(corrplot)
@@ -8,8 +10,7 @@ library(nlme)
 data(Orthodont)
 head(Orthodont)
 
-
-## ~~~~ Exploratory Data Analysis ~~~~ ##
+##### Exploratory Data Analysis ####
 
 ## Wide Format
 ortho_wide <- Orthodont %>%
@@ -18,23 +19,19 @@ ortho_wide <- Orthodont %>%
               values_from = distance)
 head(ortho_wide)
 
-
 ## Long Format
 ortho_long <- ortho_wide %>%
   pivot_longer(cols = starts_with("distance."),
                names_to = "age",
-               names_prefix="distance.",
+               names_prefix = "distance.",
                values_to = "distance")
-
 
 ## Summary statistics by sex
 by(ortho_wide[,-c(1,2)], INDICES = ortho_wide$Sex, FUN=summary)
 
-
-
 ## Summary of means
-
-summary_ortho_long <- Orthodont %>% group_by(Sex, age) %>%
+summary_ortho_long <- Orthodont %>% 
+  group_by(Sex, age) %>%
   summarise(mean_dist = mean(distance))
 
 ## Plot of means
@@ -42,27 +39,29 @@ summary_ortho_long <- Orthodont %>% group_by(Sex, age) %>%
 pal2use <- c("darkblue", "firebrick")
 
 ggplot(data=summary_ortho_long, 
-       aes(x=age, y=mean_dist, group=Sex, colour=Sex))+
-  geom_line() + geom_point(aes(shape = Sex), size=2.5) +
-  xlab("Age (years)") + ylab("Distance (mm)") + theme_bw() + 
-  scale_colour_manual(values = pal2use)
+       aes(x=age, y=mean_dist, group=Sex, colour=Sex)) +
+  geom_line() + 
+  geom_point(aes(shape = Sex), size=2.5) +
+  labs(title="Average Distance per Age by Sex", 
+       x="Age (years)", y="Distance (mm)") +
+  theme_bw() + scale_colour_manual(values = pal2use)
 
 ## Spaghetti plot: Distance vs Age
 
 ggplot(data=Orthodont, 
        aes(x=age, y=distance, group=Subject, colour=Sex))+
   geom_line() +
-  xlab("Age (years)") + ylab("Distance (mm)") + theme_bw() + 
-  scale_colour_manual(values = pal2use)
+  xlab("Age (years)") + ylab("Distance (mm)") +
+  theme_bw() + scale_colour_manual(values = pal2use)
 
 ## Subject-specific Plots
 
 ggplot(data=Orthodont, 
-       aes(x=age, y=distance, group=Subject, colour=Sex)) +
-  facet_wrap(. ~ Subject, ncol=6) + 
+       aes(x=age, y=distance, group=Sex, colour=Subject)) +
+  facet_wrap(. ~ Sex, ncol=6) + 
   geom_line() + geom_point() +
-  xlab("Age (years)") + ylab("Distance (mm)") + theme_bw() + 
-  scale_colour_manual(values = pal2use)
+  xlab("Age (years)") + ylab("Distance (mm)") + 
+  theme_bw() + scale_colour_manual(values = pal2use)
 
 ## Spaghetti plot: Growth vs Age
 
@@ -70,6 +69,7 @@ Orthodont <- Orthodont %>%
   arrange(Subject, age) %>% 
   group_by(Subject) %>% 
   mutate(growth = distance-distance[1L])
+
 ggplot(data=Orthodont, 
        aes(x=age, y=growth, group=Subject, colour=Sex))+
   geom_line() +
