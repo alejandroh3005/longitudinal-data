@@ -1,0 +1,180 @@
+---
+title: 'Biost 540: Homework 1'
+author: "Alejandro Hernandez"
+date: "Due Monday 11, April 2024"
+output:
+  html_document: default
+  pdf_document: default
+subtitle: Department of Biostatistics @ University of Washington
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# load relevant libraries
+library(ggplot2)  # plotting
+library(dplyr)    # data frame manipulation
+library(tidyr)    # data frame manipulation
+library(corrplot) # correlation plotting
+```
+
+## Problem 1
+
+The Iris dataset, which Ronald Fisher presented in his 1936 paper “The use of multiple measurements in taxonomic problems,” comprises three species of plants (setosa, virginica, and versicolor) with four measured features for each sample.
+
+```{r problem-1}
+# load Iris data
+data(iris)
+
+# dim(iris)
+# names(iris)
+# head(iris)
+# table(iris$Species)
+```
+### 1a)
+
+Please calculate the number, average petal length, and average petal width for each species.
+
+```{r problem-1a}
+# summarize average petal measurements for each species
+iris %>%
+  group_by(Species) %>%
+  summarise(
+    n = length(Species),
+    Average.petal.length = mean(Petal.Length),
+    Average.petal.width = mean(Petal.Width))
+```
+### 1b)
+
+Please draw a scatterplot using ggplot for `Sepal.Length` and `Sepal.Width`. And please assign different colors for different species.
+
+```{r problem-1b, message=F, fig.cap="Scatterplot of Sepal Measures by Species}
+# color selection
+colors <- c("#FC600A", # dark orange
+            "#C21460", # dark pink
+            "#3F0000") # darker red
+
+# plot sepal measurements for each species
+iris %>%
+  ggplot(aes(x=Sepal.Length, y=Sepal.Width, color=Species, fill=Species)) +
+  geom_point(size=2) +
+  geom_smooth(alpha=0.15, lwd=.7) +
+  xlab("Sepal Length") + ylab("Sepal Width") +
+  scale_color_manual(values=colors) +
+  scale_fill_manual(values=colors) +
+  theme_bw()
+```
+
+## Problem 2
+
+In this problem, we focused on a dataset called `WorldPhones` which summarizes the number of telephones in various regions of the world (in thousands). The data matrix has 7 rows and 8 columns. The columns of the matrix give the figures for a given region, and the rows the figures for a year.
+
+```{r question-2}
+data(WorldPhones)
+
+# dim(WorldPhones)
+WorldPhones
+```
+### 2a)
+
+Please create a new column called `year` using the rownames of the data. Convert the data into long table such that there are 3 columns in total including year, region and number.
+
+```{r question-2a}
+# define new `year` column
+WorldPhones <- WorldPhones %>%
+  data.frame(.) %>%
+  mutate(year = rownames(.))
+
+WorldPhones %>%
+  pivot_longer(cols = c("N.Amer", "Europe", "Asia", "S.Amer", "Oceania", "Africa", "Mid.Amer"),
+               names_to = "region",
+               values_to = "n.telephones")
+```
+
+## Question 3
+
+The Treatment of Lead-Exposed Children (TLC) trial was a placebo-controlled, randomized study of succimer (a chelating agent) in children with bloodlead levels of 20-44 micrograms/dL. These data consist of four repeated measurements of blood lead levels obtained at baseline (or week 0), week 1, week 4, and week 6 on 100 children who were randomly assigned to chelation treatment with succimer or placebo.
+
+Each row of the data set contains the following 6 variables: ID, Treatment Group, Lead Level Week 0, Lead Level Week 1, Lead Level Week 4, Lead Level Week 6.
+
+```{r question-3, warning=F, message=F}
+tlc <- read.csv("data/tlc.csv")[,-1]
+
+tlc <- tlc %>%
+  mutate(tx = as.factor(tx)) %>%
+  rename(week.0=y0,
+         week.1=y1,
+         week.4=y4,
+         week.6=y6)
+
+levels(tlc$tx) <- c("Treatment", "Placebo")
+```
+
+### 3a)
+
+Transform the data into long format and produce spaghetti plots illustrating the progression in lead level. Facet the plot by treatment group; be sure to label axes appropriately with units. Hint: the functions `pivot_longer` (with argument names_prefix) and `facet_wrap` will be useful to you. 
+
+```{r question-3a, fig.cap="Spaghetti plot of lead level by week and treatment group"}
+# transform data to long format
+tlc_long <- tlc %>%
+  pivot_longer(cols = starts_with("week."),
+               names_to = "week",
+               names_prefix = "week.",
+               values_to = "lead.level") %>%
+  mutate_at(c("id", "week"), as.integer)
+
+# plot of lead levels over time, by treatment
+tlc_long %>%
+  ggplot(aes(x=week, y=lead.level, group=id, color=tx)) +
+  geom_line(alpha=0.7) +
+  xlab("Week") + ylab("Lead Level (micrograms/dL)") +
+  scale_color_manual(values=colors[c(1,3)]) +
+  theme_bw()
+
+# plot of average lead levels over time, by treatment
+tlc_long %>%
+  # compute weekly averages across treatments
+  group_by(tx, week) %>%
+  summarise(mean.lead = mean(lead.level)) %>% 
+  # plot averages by week
+  ggplot(aes(x=week, y=mean.lead, color=tx)) +
+  geom_line() +
+  # set same vertical limits to minimum and maximum lead levels
+  ylim(min(tlc_long$lead.level), max(tlc_long$lead.level)) +
+  xlab("Week") + ylab("Average Lead Level (micrograms/dL)") +
+  scale_color_manual(values=colors[c(1,3)]) +
+  theme_bw()
+
+tlc_long %>%
+  ggplot(aes(x=week, y=lead.level)) +
+  geom_line(aes(group=id, color=tx), alpha=0.4) +
+  geom_point(data = tlc_long %>% group_by(tx, week) %>% summarise(mean=mean(lead.level)),
+             aes(x=week, y=mean, color=tx), size=2.5) +
+  xlab("Week") + ylab("Lead Level (micrograms/dL)") +
+  scale_color_manual(values=colors[c(1,3)]) +
+  theme_bw()
+  
+  
+  geom_point(data = orthoad %>% group_by(age) %>% summarise(mean=mean(distance)),
+             aes(x=age, y=mean), size=3) + 
+  xlab("Age (years)") + ylab("Distance (mm)") + theme_bw() + 
+  scale_x_continuous(breaks=seq(8,18,2))
+```
+### 3b)
+
+Compute the Pearson correlation matrix between outcomes at different time points.
+
+```{r}
+# correlation matrix
+tlc %>%
+  select(starts_with("week.")) %>%
+  cor %>%
+  round(2)
+```
+### 3c)
+
+Suppose you were interested in comparing the mean difference in lead levels between treatment and control groups 6 weeks after treatment provision. Using a linear model, compare the lead levels between treatment groups at the 6 week time point. Provide and describe a point estimate for the treatment effect along with the standard error. Does treatment have a significant effect on the Week 6 lead levels at significance level 0.05?
+
+
+
+**End of document.**
