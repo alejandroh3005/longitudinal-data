@@ -1,7 +1,7 @@
 ---
 title: 'Biost 540: Homework 1'
 author: "Alejandro Hernandez"
-date: "Due Monday 11, April 2024"
+date: "Due Thursday 11, April 2024"
 output:
   html_document: default
   pdf_document: default
@@ -9,13 +9,15 @@ subtitle: Department of Biostatistics @ University of Washington
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
 
 # load relevant libraries
 library(ggplot2)  # plotting
 library(dplyr)    # data frame manipulation
 library(tidyr)    # data frame manipulation
 library(corrplot) # correlation plotting
+library(rigr)     # regression
+library(modelr)   # regression
 ```
 
 ## Problem 1
@@ -48,7 +50,7 @@ iris %>%
 
 Please draw a scatterplot using ggplot for `Sepal.Length` and `Sepal.Width`. And please assign different colors for different species.
 
-```{r problem-1b, message=F, fig.cap="Scatterplot of Sepal Measures by Species}
+```{r problem-1b, fig.cap="Scatterplot of Sepal Measures by Species"}
 # color selection
 colors <- c("#FC600A", # dark orange
             "#C21460", # dark pink
@@ -91,13 +93,14 @@ WorldPhones %>%
                values_to = "n.telephones")
 ```
 
-## Question 3
+## Problem 3
 
 The Treatment of Lead-Exposed Children (TLC) trial was a placebo-controlled, randomized study of succimer (a chelating agent) in children with bloodlead levels of 20-44 micrograms/dL. These data consist of four repeated measurements of blood lead levels obtained at baseline (or week 0), week 1, week 4, and week 6 on 100 children who were randomly assigned to chelation treatment with succimer or placebo.
 
 Each row of the data set contains the following 6 variables: ID, Treatment Group, Lead Level Week 0, Lead Level Week 1, Lead Level Week 4, Lead Level Week 6.
 
-```{r question-3, warning=F, message=F}
+```{r question-3}
+# load lead exposure study data
 tlc <- read.csv("data/tlc.csv")[,-1]
 
 tlc <- tlc %>%
@@ -114,7 +117,7 @@ levels(tlc$tx) <- c("Treatment", "Placebo")
 
 Transform the data into long format and produce spaghetti plots illustrating the progression in lead level. Facet the plot by treatment group; be sure to label axes appropriately with units. Hint: the functions `pivot_longer` (with argument names_prefix) and `facet_wrap` will be useful to you. 
 
-```{r question-3a, fig.cap="Spaghetti plot of lead level by week and treatment group"}
+```{r question-3a, fig.cap="Lead levels and averages by week and treatment group"}
 # transform data to long format
 tlc_long <- tlc %>%
   pivot_longer(cols = starts_with("week."),
@@ -123,48 +126,26 @@ tlc_long <- tlc %>%
                values_to = "lead.level") %>%
   mutate_at(c("id", "week"), as.integer)
 
-# plot of lead levels over time, by treatment
-tlc_long %>%
-  ggplot(aes(x=week, y=lead.level, group=id, color=tx)) +
-  geom_line(alpha=0.7) +
-  xlab("Week") + ylab("Lead Level (micrograms/dL)") +
-  scale_color_manual(values=colors[c(1,3)]) +
-  theme_bw()
-
-# plot of average lead levels over time, by treatment
-tlc_long %>%
-  # compute weekly averages across treatments
-  group_by(tx, week) %>%
-  summarise(mean.lead = mean(lead.level)) %>% 
-  # plot averages by week
-  ggplot(aes(x=week, y=mean.lead, color=tx)) +
-  geom_line() +
-  # set same vertical limits to minimum and maximum lead levels
-  ylim(min(tlc_long$lead.level), max(tlc_long$lead.level)) +
-  xlab("Week") + ylab("Average Lead Level (micrograms/dL)") +
-  scale_color_manual(values=colors[c(1,3)]) +
-  theme_bw()
-
-tlc_long %>%
+# plot of lead levels and averages over time, by treatment
+gg <- tlc_long %>%
   ggplot(aes(x=week, y=lead.level)) +
   geom_line(aes(group=id, color=tx), alpha=0.4) +
-  geom_point(data = tlc_long %>% group_by(tx, week) %>% summarise(mean=mean(lead.level)),
+  geom_point(data = tlc_long %>% 
+               group_by(tx, week) %>% 
+               summarise(mean=mean(lead.level)),
              aes(x=week, y=mean, color=tx), size=2.5) +
   xlab("Week") + ylab("Lead Level (micrograms/dL)") +
   scale_color_manual(values=colors[c(1,3)]) +
   theme_bw()
-  
-  
-  geom_point(data = orthoad %>% group_by(age) %>% summarise(mean=mean(distance)),
-             aes(x=age, y=mean), size=3) + 
-  xlab("Age (years)") + ylab("Distance (mm)") + theme_bw() + 
-  scale_x_continuous(breaks=seq(8,18,2))
+
+gg                        # treatment groups overlayed
+gg + facet_wrap(vars(tx)) # treatment group separated
 ```
 ### 3b)
 
 Compute the Pearson correlation matrix between outcomes at different time points.
 
-```{r}
+```{r question-3b}
 # correlation matrix
 tlc %>%
   select(starts_with("week.")) %>%
@@ -175,6 +156,105 @@ tlc %>%
 
 Suppose you were interested in comparing the mean difference in lead levels between treatment and control groups 6 weeks after treatment provision. Using a linear model, compare the lead levels between treatment groups at the 6 week time point. Provide and describe a point estimate for the treatment effect along with the standard error. Does treatment have a significant effect on the Week 6 lead levels at significance level 0.05?
 
+```{r question-3c}
+# fit linear model of week 6 level from treatment group
+mod_post <- rigr::regress("mean", week.6 ~ tx, data = tlc)
+
+coef(mod_post)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+```
+```{r question-3c-alternative}
+# fit linear model of lead level from week and treatment group, controlling for 
+# weeks 1 and 4
+mod1 <- tlc_long %>% 
+  mutate(week = factor(week)) %>% 
+  rigr::regress("mean", lead.level ~ week + tx, data=.)
+mod2 <- tlc_long %>%
+  mutate(week = factor(week)) %>% 
+  rigr::regress("mean", lead.level ~ tx, data=.)
+
+anova(mod2, mod1)
+
+# inspect estimates of treatment effect
+coef(mod1)[,c(1, 3, 7)]
+```
+
+### 3d)
+
+Suppose we adopt an approach to analyze the change scores from week 0 to week 6. Using a linear model, compare the change in lead levels from week 0 to week 6 between treatment groups. Provide and describe a point estimate for the treatment effect along with the standard error. Does your conclusion from part C change?
+
+```{r question-3d}
+# fit linear model of change in lead level from treatment group
+mod_change <- tlc %>%
+  mutate(change = week.6 - week.0) %>%
+  rigr::regress("mean", change ~ tx, data = .)
+
+coef(mod_change)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+```
+
+### 3e)
+
+Suppose we wish to use an ANCOVA model to evaluate the effect of treatment on Week 6 lead levels adjusting for the baseline lead level. Reinterpret the treatment effect and provide an estimate of the standard error. Does your conclusion differ from part C? Hint: ANCOVA is a linear model which adjusts for the baseline outcome as covariate.
+
+```{r question-3e}
+# fit linear model of week 6 level from treatment group and week 0 level
+mod_ancova <- rigr::regress("mean", week.6 ~ tx + week.0, data = tlc)
+
+coef(mod_ancova)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+```
+
+### 3d)
+
+Plot the standard errors of each of the models fit in parts C-E. How does incorporating knowledge of the baseline response impact the precision or power of your inference on the treatment effect at 6 weeks?
+
+```{r question-3d}
+# plot standard errors of each model
+data.frame(
+  model = c("Post", "Change", "ANCOVA"),
+  robust.sd = c(coef(mod_post)["txPlacebo","Robust SE"],
+                coef(mod_change)["txPlacebo","Robust SE"],
+                coef(mod_ancova)["txPlacebo","Robust SE"])) %>%
+  ggplot(data = ., aes(x = model, y = robust.sd)) + 
+    geom_point(size = 2) + 
+    xlab("Model") + ylab("Robust Standard Error") + theme_bw()
+```
+
+## Problem 4
+
+The Six Cities Study of Air Pollution and Health was a longitudinal study designed to characterize lung growth as measured by changes in pulmonary function in children and adolescents, and the factors that influence lung function growth. A cohort of 13,379 children born on or after 1967 was enrolled in six communities across the U.S.: Watertown (Massachusetts), Kingston and Harriman (Tennessee), a section of St. Louis (Missouri), Steubenville (Ohio), Portage (Wisconsin), and Topeka (Kansas). Most children were enrolled in the first or second grade (between the ages of six and seven) and measurements of study participants were obtained annually until graduation from high school or loss to follow-up. At each annual examination, spirometry, the measurement of pulmonary function, was performed and a respiratory health questionnaire was completed by a parent or guardian.
+
+The dataset contains a subset of the pulmonary function data collected in the Six Cities Study. The data consist of all measurements of FEV1, height and age obtained from a randomly selected subset of the female participants living in Topeka, Kansas. The random sample consists of 300 girls, with a minimum of one and a maximum of twelve observations over time. The variables included in the dataset are `Subject ID`, `Height`, `Age`, `Initial Height`, `Initial Age`, and `Log(FEV1)` (a spirometry measure of lung function).
+
+```{r question4}
+# load FEV data
+fev <- read.csv("data/Topeka-2.csv")
+```
+
+## 4a)
+
+Produce a summary (e.g., mean) of the initial height, initial age, and initial log(FEV1). Hint: you will create the initial logFEV1 variable using mutate, selecting the logFEV1 variable when age==age0. You will also need to use the function select and distinct functions to select a single entry per participant, such that the mean is not calculated over repeated measures.
+
+```{r question-4a}
+# summarize number of times an individual was measured and their average
+fev %>% 
+  group_by(id) %>%
+  summarise(n.measures = length(logFEV1),
+            mean.logFEV = min(logFEV1))
+
+# calculate averages of initial measures
+# gather initial measures
+initial.measures <- fev %>% 
+  group_by(id, height0, age0) %>% 
+  summarize(n = length(height0),
+            logFEV1.0 = logFEV1[1]) %>%
+  select(id, n, everything())
+
+# average initial measures
+initial.measures %>% 
+  ungroup(id) %>% 
+  select(height0, age0, logFEV1.0) %>%
+  colMeans %>%
+  round(., 3)
+```
 
 
 **End of document.**
