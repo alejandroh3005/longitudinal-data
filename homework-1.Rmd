@@ -3,8 +3,8 @@ title: 'Biost 540: Homework 1'
 author: "Alejandro Hernandez"
 date: "Due Thursday 11, April 2024"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 subtitle: Department of Biostatistics @ University of Washington
 ---
 
@@ -18,9 +18,10 @@ library(tidyr)    # data frame manipulation
 library(corrplot) # correlation plotting
 library(rigr)     # regression
 library(modelr)   # regression
+library(knitr)    # pretty printing data frames
 ```
 
-## Problem 1
+# Problem 1
 
 The Iris dataset, which Ronald Fisher presented in his 1936 paper “The use of multiple measurements in taxonomic problems,” comprises three species of plants (setosa, virginica, and versicolor) with four measured features for each sample.
 
@@ -33,7 +34,8 @@ data(iris)
 # head(iris)
 # table(iris$Species)
 ```
-### 1a)
+
+## 1a)
 
 Please calculate the number, average petal length, and average petal width for each species.
 
@@ -44,9 +46,11 @@ iris %>%
   summarise(
     n = length(Species),
     Average.petal.length = mean(Petal.Length),
-    Average.petal.width = mean(Petal.Width))
+    Average.petal.width = mean(Petal.Width)) %>%
+  knitr::kable()
 ```
-### 1b)
+
+## 1b)
 
 Please draw a scatterplot using ggplot for `Sepal.Length` and `Sepal.Width`. And please assign different colors for different species.
 
@@ -59,15 +63,15 @@ colors <- c("#FC600A", # dark orange
 # plot sepal measurements for each species
 iris %>%
   ggplot(aes(x=Sepal.Length, y=Sepal.Width, color=Species, fill=Species)) +
-  geom_point(size=2) +
-  geom_smooth(alpha=0.15, lwd=.7) +
-  xlab("Sepal Length") + ylab("Sepal Width") +
-  scale_color_manual(values=colors) +
-  scale_fill_manual(values=colors) +
-  theme_bw()
+    geom_point(size=2) +
+    geom_smooth(alpha=0.15, lwd=.7) +
+    xlab("Sepal Length") + ylab("Sepal Width") +
+    scale_color_manual(values=colors) +
+    scale_fill_manual(values=colors) +
+    theme_bw()
 ```
 
-## Problem 2
+# Problem 2
 
 In this problem, we focused on a dataset called `WorldPhones` which summarizes the number of telephones in various regions of the world (in thousands). The data matrix has 7 rows and 8 columns. The columns of the matrix give the figures for a given region, and the rows the figures for a year.
 
@@ -75,9 +79,9 @@ In this problem, we focused on a dataset called `WorldPhones` which summarizes t
 data(WorldPhones)
 
 # dim(WorldPhones)
-WorldPhones
 ```
-### 2a)
+
+## 2a)
 
 Please create a new column called `year` using the rownames of the data. Convert the data into long table such that there are 3 columns in total including year, region and number.
 
@@ -88,12 +92,14 @@ WorldPhones <- WorldPhones %>%
   mutate(year = rownames(.))
 
 WorldPhones %>%
-  pivot_longer(cols = c("N.Amer", "Europe", "Asia", "S.Amer", "Oceania", "Africa", "Mid.Amer"),
+  pivot_longer(cols = c("N.Amer", "Europe", "Asia", "S.Amer", "Oceania", 
+                        "Africa", "Mid.Amer"),
                names_to = "region",
-               values_to = "n.telephones")
+               values_to = "n.telephones") %>%
+  head(10) %>% knitr::kable()
 ```
 
-## Problem 3
+# Problem 3
 
 The Treatment of Lead-Exposed Children (TLC) trial was a placebo-controlled, randomized study of succimer (a chelating agent) in children with bloodlead levels of 20-44 micrograms/dL. These data consist of four repeated measurements of blood lead levels obtained at baseline (or week 0), week 1, week 4, and week 6 on 100 children who were randomly assigned to chelation treatment with succimer or placebo.
 
@@ -111,9 +117,10 @@ tlc <- tlc %>%
          week.6=y6)
 
 levels(tlc$tx) <- c("Treatment", "Placebo")
+tlc$tx <- factor(tlc$tx, levels=c("Placebo", "Treatment"))
 ```
 
-### 3a)
+## 3a)
 
 Transform the data into long format and produce spaghetti plots illustrating the progression in lead level. Facet the plot by treatment group; be sure to label axes appropriately with units. Hint: the functions `pivot_longer` (with argument names_prefix) and `facet_wrap` will be useful to you. 
 
@@ -134,14 +141,15 @@ gg <- tlc_long %>%
                group_by(tx, week) %>% 
                summarise(mean=mean(lead.level)),
              aes(x=week, y=mean, color=tx), size=2.5) +
-  xlab("Week") + ylab("Lead Level (micrograms/dL)") +
+  xlab("Week") + ylab("Lead Level (ug/dL)") +
   scale_color_manual(values=colors[c(1,3)]) +
   theme_bw()
 
 gg                        # treatment groups overlayed
 gg + facet_wrap(vars(tx)) # treatment group separated
 ```
-### 3b)
+
+## 3b)
 
 Compute the Pearson correlation matrix between outcomes at different time points.
 
@@ -150,9 +158,11 @@ Compute the Pearson correlation matrix between outcomes at different time points
 tlc %>%
   select(starts_with("week.")) %>%
   cor %>%
-  round(2)
+  knitr::kable(digits = 2)
 ```
-### 3c)
+
+
+## 3c)
 
 Suppose you were interested in comparing the mean difference in lead levels between treatment and control groups 6 weeks after treatment provision. Using a linear model, compare the lead levels between treatment groups at the 6 week time point. Provide and describe a point estimate for the treatment effect along with the standard error. Does treatment have a significant effect on the Week 6 lead levels at significance level 0.05?
 
@@ -160,71 +170,69 @@ Suppose you were interested in comparing the mean difference in lead levels betw
 # fit linear model of week 6 level from treatment group
 mod_post <- rigr::regress("mean", week.6 ~ tx, data = tlc)
 
-coef(mod_post)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+# coef(mod_post)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+coef(mod_post)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% 
+  knitr::kable(digits = 3)
 ```
-```{r question-3c-alternative}
-# fit linear model of lead level from week and treatment group, controlling for 
-# weeks 1 and 4
-mod1 <- tlc_long %>% 
-  mutate(week = factor(week)) %>% 
-  rigr::regress("mean", lead.level ~ week + tx, data=.)
-mod2 <- tlc_long %>%
-  mutate(week = factor(week)) %>% 
-  rigr::regress("mean", lead.level ~ tx, data=.)
+From a simple linear model we estimate the difference in average lead levels between the treated and control groups 6 weeks after treatment provision to be 2.884 $\mu g / dL$, with the treated group having lower average lead levels (standard error of 1.532 $\mu g / dL$). With a significance level of $\alpha$ = 0.05, we conclude that this difference is not statistically significant (pval = 0.063).
 
-anova(mod2, mod1)
-
-# inspect estimates of treatment effect
-coef(mod1)[,c(1, 3, 7)]
-```
-
-### 3d)
+## 3d)
 
 Suppose we adopt an approach to analyze the change scores from week 0 to week 6. Using a linear model, compare the change in lead levels from week 0 to week 6 between treatment groups. Provide and describe a point estimate for the treatment effect along with the standard error. Does your conclusion from part C change?
 
 ```{r question-3d}
 # fit linear model of change in lead level from treatment group
 mod_change <- tlc %>%
-  mutate(change = week.6 - week.0) %>%
+  mutate(change = abs(week.6 - week.0)) %>%
   rigr::regress("mean", change ~ tx, data = .)
 
-coef(mod_change)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+coef(mod_change)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% 
+  knitr::kable(digits = 3)
 ```
 
-### 3e)
+From a simple linear model we estimate the (absolute) change in lead levels from week 0 to week 6 to differ between the treated and control group by 4.116 $\mu g / dL$, on average, with a standard error of 0.901 $\mu g / dL$, and with the treated group experiencing greater absolute change. With a significance level of $\alpha$ = 0.05, we conclude that this difference is statistically significant (pval < 0.001).
 
-Suppose we wish to use an ANCOVA model to evaluate the effect of treatment on Week 6 lead levels adjusting for the baseline lead level. Reinterpret the treatment effect and provide an estimate of the standard error. Does your conclusion differ from part C? Hint: ANCOVA is a linear model which adjusts for the baseline outcome as covariate.
+Compared to results from (c), this model suggests that treatment effect was meaningful, when measuring effect between week 0 and week 6.
+
+## 3e)
+
+Suppose we wish to use an ANCOVA model to evaluate the effect of treatment on Week 6 lead levels adjusting for the baseline lead level. Reinterpret the treatment effect and provide an estimate of the standard error. Does your conclusion differ from part C?
 
 ```{r question-3e}
 # fit linear model of week 6 level from treatment group and week 0 level
 mod_ancova <- rigr::regress("mean", week.6 ~ tx + week.0, data = tlc)
 
-coef(mod_ancova)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% round(., 3)
+coef(mod_ancova)[,c("Estimate","Robust SE","Pr(>|t|)")] %>% 
+  knitr::kable(digits = 3)
 ```
+From a simple linear model we estimate the difference in average lead levels between the treated and control groups 6 weeks after treatment provision, given baseline lead levels, to be 3.120 $\mu g / dL$, with the treated group having lower average lead levels (standard error of 1.238 $\mu g / dL$). With a significance level of $\alpha$ = 0.05, we conclude that this difference is statistically significant (pval = 0.013).
 
-### 3d)
+Compared to results from (c), this model suggests that treatment effect on week 6 lead levels was meaningful, when controlling for baseline levels.
+
+## 3f)
 
 Plot the standard errors of each of the models fit in parts C-E. How does incorporating knowledge of the baseline response impact the precision or power of your inference on the treatment effect at 6 weeks?
 
-```{r question-3d}
+```{r question-3f, fig.cap="Model standard errors"}
 # plot standard errors of each model
 data.frame(
   model = c("Post", "Change", "ANCOVA"),
-  robust.sd = c(coef(mod_post)["txPlacebo","Robust SE"],
-                coef(mod_change)["txPlacebo","Robust SE"],
-                coef(mod_ancova)["txPlacebo","Robust SE"])) %>%
+  robust.sd = c(coef(mod_post)["txTreatment","Robust SE"],
+                coef(mod_change)["txTreatment","Robust SE"],
+                coef(mod_ancova)["txTreatment","Robust SE"])) %>%
   ggplot(data = ., aes(x = model, y = robust.sd)) + 
     geom_point(size = 2) + 
     xlab("Model") + ylab("Robust Standard Error") + theme_bw()
 ```
+Comparing the Post to the ANCOVA model, which measure treatment effect at six weeks, knowledge of the baseline response strengthens the precision our inference.
 
-## Problem 4
+# Problem 4
 
 The Six Cities Study of Air Pollution and Health was a longitudinal study designed to characterize lung growth as measured by changes in pulmonary function in children and adolescents, and the factors that influence lung function growth. A cohort of 13,379 children born on or after 1967 was enrolled in six communities across the U.S.: Watertown (Massachusetts), Kingston and Harriman (Tennessee), a section of St. Louis (Missouri), Steubenville (Ohio), Portage (Wisconsin), and Topeka (Kansas). Most children were enrolled in the first or second grade (between the ages of six and seven) and measurements of study participants were obtained annually until graduation from high school or loss to follow-up. At each annual examination, spirometry, the measurement of pulmonary function, was performed and a respiratory health questionnaire was completed by a parent or guardian.
 
 The dataset contains a subset of the pulmonary function data collected in the Six Cities Study. The data consist of all measurements of FEV1, height and age obtained from a randomly selected subset of the female participants living in Topeka, Kansas. The random sample consists of 300 girls, with a minimum of one and a maximum of twelve observations over time. The variables included in the dataset are `Subject ID`, `Height`, `Age`, `Initial Height`, `Initial Age`, and `Log(FEV1)` (a spirometry measure of lung function).
 
-```{r question4}
+```{r question-4}
 # load FEV data
 fev <- read.csv("data/Topeka-2.csv")
 ```
@@ -238,7 +246,8 @@ Produce a summary (e.g., mean) of the initial height, initial age, and initial l
 fev %>% 
   group_by(id) %>%
   summarise(n.measures = length(logFEV1),
-            mean.logFEV = min(logFEV1))
+            mean.logFEV = min(logFEV1)) %>%
+  head %>% knitr::kable()
 
 # calculate averages of initial measures
 # gather initial measures
@@ -253,8 +262,7 @@ initial.measures %>%
   ungroup(id) %>% 
   select(height0, age0, logFEV1.0) %>%
   colMeans %>%
-  round(., 3)
+  knitr::kable(digits = 3, col.names = c("", "Average"))
 ```
-
 
 **End of document.**
