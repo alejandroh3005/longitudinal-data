@@ -1,0 +1,76 @@
+---
+title: "Georgia Birth Weight EDA"
+author: "Alejandro Hernandez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# clear workspace
+rm(list = ls())
+
+# load relevant libraries
+library(tidyverse)
+library(knitr)
+library(rigr)
+```
+
+```{r data-loading}
+birthwt <- read.csv("data/cdc birthwt.csv")
+
+names(birthwt) <- c("mother.id", "birth.order", "birth.weight", "maternal.age", "child.id")
+
+# create maternal age factor
+breaks <- c(min(birthwt$maternal.age), 20, 30, 40,
+            max(birthwt$maternal.age))
+birthwt <- birthwt %>%
+  mutate(maternal.age.factor = cut(maternal.age, breaks=breaks,
+                                   include.lowest = T)) 
+
+
+# validate each mother has 5 children
+birthwt %>%
+  group_by(mother.id) %>%
+  summarize(n = length(birth.order)) %>%
+  reframe(n == 5) %>% prod
+
+# summarize numeric variables
+birthwt %>% 
+  select(birth.order, birth.weight, maternal.age) %>% 
+  mutate_at("birth.order", as.factor) %>%
+  summary
+
+# distribution of birth weight
+birthwt %>%
+  ggplot(aes(x = birth.weight, y = ..density..)) +
+  geom_histogram()
+
+# distribution of maternal age
+birthwt %>%
+  ggplot(aes(x = maternal.age, y = ..density..)) +
+  geom_histogram()
+
+# create a inter-pregnancy variable
+birthwt <- birthwt %>%
+  arrange(mother.id, birth.order) %>%
+  group_by(mother.id) %>%
+  mutate(interpregnancy = maternal.age - lag(maternal.age))
+birthwt
+
+# plot birth weight vs maternal age
+birthwt %>%
+  ggplot(aes(x = maternal.age, y = birth.weight)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = F)
+
+birthwt %>%
+  ggplot(aes(x = maternal.age.factor, y = birth.weight)) +
+  geom_jitter(width = 0.1, height = 0, alpha = 0.3) +
+  geom_smooth(method = "loess", se = F)
+
+# plot birth weight vs inter-pregnancy interval
+birthwt %>%
+  ggplot(aes(y = birth.weight, x = interpregnancy)) +
+  geom_point()
+```

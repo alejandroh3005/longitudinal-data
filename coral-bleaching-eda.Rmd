@@ -1,0 +1,58 @@
+---
+title: "Coral Bleaching EDA"
+author: "Alejandro Hernandez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# clear workspace
+rm(list = ls())
+
+# load relevant libraries
+library(tidyverse)
+library(knitr)
+library(rigr)
+```
+
+```{r data-loading}
+coral <- read.csv("data/coral-bleaching.csv")
+coral.data.dictionary <- read.csv("data/coral-bleaching-data-dictionary.csv")
+
+coral.data.dictionary %>% kable
+```
+```{r data-summary}
+# island means
+coral %>%
+  select(Island_Name, PctCoralFullyBleached_mean) %>%
+  group_by(Island_Name) %>%
+  summarise(mean = mean(PctCoralFullyBleached_mean))
+
+# boxplots
+coral %>%
+  ggplot(aes(y = PctCoralFullyBleached_mean, x = Island_Name, 
+             color = Island_Name)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.2)
+
+# histograms 
+coral %>%
+  ggplot(aes(x = PctCoralFullyBleached_mean, fill = Island_Name)) + 
+  geom_histogram() + facet_wrap(vars(Island_Name))
+```
+```{r}
+# plot long v. lat
+coral %>%
+  ggplot(aes(x = Longitude_mn, y = Latitude_mn, 
+             color = Island_Name)) + 
+  geom_point()
+
+coral %>%
+  ggplot(aes(x = Longitude_ras, y = Latitude_ras, 
+             color = Island_Name)) + 
+  geom_point()
+```
+
+
+**End of document.**

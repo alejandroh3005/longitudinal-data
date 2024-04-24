@@ -1,0 +1,36 @@
+Island_Name,Name of Island
+RasterAddress_1km,Unique ID for 1 km Cell
+DepthBin_5m,"Bathymetric Mean Depth (see Depth_m_mn) binned to 5 meters (0,5,10,15,20,25,30, etc)"
+Depth_m_mn,Bathymetric Mean Depth (in meters) of all sampling points in the 1 km cluster
+Longitude_mn,Mean Longitude of all sampling points in the 1 km cluster
+Latitude_mn,Mean Latitude of all sampling points in the 1 km cluster
+Longitude_ras,Centroid Longitude of 1 km raster grid cell that cluster
+Latitude_ras,Centroid Latitude of 1 km raster grid cell that cluster
+AreaSurveyed_m2_sum,"Area surveyed in Cover/Bleaching assessment (in m2), sum across all survey points within cluster"
+PercentLiveCoralCover_mean,Mean percent of live coral cover among cluster sites
+PercentLiveCoralCover_sd,Standard Deviation of percent of live coral cover among cluster sites
+PercentLiveCoralCover_N,N sites in mean of Percent Live Coral Cover
+PctCoralUnbleached_mean,Mean percent of unbleached coral (percentage of total live cover) among cluster sites
+PctCoralUnbleached_sd,Standard Deviation of percent of unbleached coral (percentage of total live cover) among cluster sites
+PctCoralUnbleached_N,N sites in percent of unbleached coral (percentage of total live cover)
+PctCoralPartialBleached_mean,Mean percent of partially bleached coral (percentage of total live cover) among cluster sites
+PctCoralPartialBleached_sd,Standard Deviation of percent of partially bleached coral (percentage of total live cover) among cluster sites
+PctCoralPartialBleached_N,N sites in percent of partially bleached coral (percentage of total live cover)
+PctCoralFullyBleached_mean,Mean percent of fully bleached coral (percentage of total live cover) among cluster sites
+PctCoralFullyBleached_sd,Standard Deviation of percent of fully bleached coral (percentage of total live cover) among cluster sites
+PctCoralFullyBleached_N,N sites in percent of fully bleached coral (percentage of total live cover)
+PctAffected_mean,Mean percent of fully and partially bleached coral (percentage of total live cover) among cluster sites
+PctAffected_sd,Standard Deviation of percent of fully and partially bleached coral (percentage of total live cover) among cluster sites
+PctAffected_N,N sites in percent of fully and partially bleached coral (percentage of total live cover)
+DHW.MeanMax_Degree_Heating_Weeks_MO03,Mean of the maximum Degree Heating Weeks of all DHW positive events in the three months previous to sampling. Data were originally downloaded from NOAA Coral Reef Watch (see Lineage Sources).
+DHW.MeanMax_Degree_Heating_Weeks_YR10YR01,"Mean of the maximum Degree Heating Weeks of all DHW positive events in the ten years previous to sampling, but not in the year immediately before sampling. Data were originally downloaded from NOAA Coral Reef Watch (see Lineage Sources)."
+mean_PAR_MODIS_Daily_MO03,Mean of the Photosynthetically Active Radiation at the surface in the three months previous to sampling. Data were originally downloaded from ___ (see Lineage Sources).
+mean_kdPAR_VIIRS_Weekly_MO03,Mean of the attenuation coefficient of Photosynthetically Active Radiation in the three months previous to sampling. Data were originally downloaded from NOAA Coastwatch/Oceanwatch (see Lineage Sources).
+mean_weekly_range_SST_CRW_Daily_ALLB4,Mean of the weekly range of sea surface temperature in the three months previous to sampling. Calculations were made using SST data downloaded from NOAA Coral Reef Watch (see Lineage Sources).
+Prop_BleachResTaxa,Modeled Proportion of bleaching resistant taxa
+OTP_MHI_OSDS_TotalEffluent,"Ocean Tipping Points, Hawaii estimate of Total OSDS Effluent. Data were originally produced by Wedding et al. (see Lineage Sources)."
+LBSP_AgGolf_runoff_01_sc,"Ocean Tipping Points, Hawaii estimate of Agricultural and Golf Runoff. Data were originally produced by J. Lecky (see Lineage Sources)."
+LBSP_Urban_runoff_01_sc,"Ocean Tipping Points, Hawaii estimate of Urban Runoff. Data were originally produced by J. Lecky (see Lineage Sources)."
+WaveEnergy_MN1979.2012,"Mean wave energy, WaveWatch III, incident wave swath. Data were originally produced by the PacIOOS Wave Watch III Global Wave Model (see Lineage Sources)."
+TourRec_DirectHuman_10yrAvgPUD,"Ocean Tipping Points, Hawaii estimate of Tourism and Recreation. Data were originally produced by J. Lecky (see Lineage Sources)."
+Correlation_Weight,Cluster correlation weight - inverse of standard error of PctAffected
