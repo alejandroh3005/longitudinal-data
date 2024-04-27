@@ -26,38 +26,170 @@ breaks <- c(min(birthwt$maternal.age), 20, 30, 40,
             max(birthwt$maternal.age))
 birthwt <- birthwt %>%
   mutate(maternal.age.factor = cut(maternal.age, breaks=breaks,
-                                   include.lowest = T)) 
+                                   include.lowest = T))
+```
 
+### Validation
 
+```{r}
 # validate each mother has 5 children
 birthwt %>%
   group_by(mother.id) %>%
   summarize(n = length(birth.order)) %>%
-  reframe(n == 5) %>% prod
-
+  all(.$n == 5)
+  
 # summarize numeric variables
 birthwt %>% 
   select(birth.order, birth.weight, maternal.age) %>% 
   mutate_at("birth.order", as.factor) %>%
   summary
+```
+# Exploratory data analysis
 
-# distribution of birth weight
+## Birth weight
+
+**Birth weight** is an infant’s weight that is optimally measured in the hours following birth.
+
+The World Health Organization (WHO) defines low birth weight as below 2500 g (5.5 lbs / 5 lbs 8 oz) and very low birth weight as below 1500 g (3.3 lbs / 3 lbs 5 oz). An infant with a low birth weight is often also premature, and at greater risk of health complications (e.g., underdeveloped lungs, inability to maintain body temperature, difficulty gaining weight, intestinal disease, bleeding in the brain, and sudden death).
+
+Factors that are believed to cause low birth weight include maternal health and age, and multiple-baby pregnancies. Effects from race are also believed to impact birth weight: among Americans, Black mothers are twice as likely as white mothers to have low birth weights.
+
+*In some cases, the validity of birth weight data is of concern, as measures may be taken days after birth, after which significant weight loss may have occurred. We assume the source of our data to be valid.*
+
+1. What are the quartiles and average birth weight among all mothers? What quantile defines the threshold of low birth weights? How many births fall into each quartile and each category of (low / not low)?
+
+2. Describe the distribution of all birth weights.
+
+3. Describe the distribution of each mother’s average birth weight. How does this distribution compare to that of all birth weights?
+
+```{r}
+# numeric summary of birth weight
+round(c(Mean = mean(birthwt$birth.weight), 
+        quantile(birthwt$birth.weight),
+        IQR = IQR(birthwt$birth.weight)), 2)
+
+# size of each quantile
+birthwt %>%
+  mutate(quartile = cut(birth.weight, 
+                        breaks = quantile(birthwt$birth.weight, names = F), 
+                        include.lowest = T,
+                        labels = c("Q1","Q2","Q3","Q4"))) %>%
+  group_by(quartile) %>%
+  summarize(n = length(quartile))
+
+# number of low births
+birthwt %>%
+  mutate(low.weight = ifelse(birth.weight < 2500, 
+                             ifelse(birth.weight < 1500, "Very low", "Low"), 
+                             "Not low")) %>%
+  group_by(low.weight) %>%
+  summarize(n = length(low.weight))
+
+# distribution of all birth weights
 birthwt %>%
   ggplot(aes(x = birth.weight, y = ..density..)) +
-  geom_histogram()
+  geom_histogram() +
+  geom_vline(xintercept = c(1500, 2500), color = c("red", "blue")) +
+  geom_vline(xintercept = quantile(birthwt$birth.weight), color = "grey") + 
+  theme_bw()
 
+# distribution of mothers' average birth weight
+birthwt %>%
+  group_by(mother.id) %>%
+  summarize(avg.weight = mean(birth.weight)) %>%
+  ggplot(aes(x = avg.weight, y = ..density..)) + 
+    geom_histogram() +   
+    geom_vline(xintercept = c(1500, 2500), color = c("red", "blue"))
+
+```
+
+## Maternal age
+
+**Maternal age** is the age at which a mother gives birth. Previous studies suggest that maternal age is associated with birth weight (younger and older mothers have greater rates of preterm births).
+
+1. What are the quartiles and average maternal age among all mothers? What quantile defines the thresholds of middle aged? How many births fall into each quantile and each category of (young / middle age)?
+
+2. Describe the distribution of all maternal ages.
+
+3. Describe the distribution of each mother’s average maternal age. How does this distribution compare to that of all maternal ages?
+
+```{r}
 # distribution of maternal age
 birthwt %>%
   ggplot(aes(x = maternal.age, y = ..density..)) +
   geom_histogram()
+```
 
-# create a inter-pregnancy variable
+## Interpregnancy interval
+
+**Interpregnancy interval** is the time elapsed between one child’s birth and the subsequent child’s conception, often measured in months. This interval can be brief: mothers may become pregnant as early as four weeks after delivery.4 Similar to maternal age, extremely short and long intervals are associated with health risks for the mother and second-born child. Interpregnancy intervals less than 18 months introduce moderate risk to children and significant risk is associated with intervals shorter than 6 months; intervals greater than 5-10 years is associated with increased risk of adverse health outcomes for both mother and child.4
+
+With available data, our best estimate of this interval is the difference in maternal age between two subsequent births, measured in years, which in certain cases may be a slight underestimate.
+
+1. What are the group sizes and mode for all interval values?
+
+2. Describe the distribution of all intervals.
+
+3. Describe the distribution of each mother’s interval mode. How does this distribution compare to that of all intervals?
+
+*Interdelivery interval is the time elapsed between two subsequent births. May we more accurately estimate this interval using our data? Not necessarily- the accuracy of using the difference in maternal ages to estimate an interpregnancy versus an interdelivery interval varies by situation and relies on information unavailable to us. We have no workaround for this issue, other than to define short and long intervals according to respective thresholds (which differ by ?? 9 months?) and examine the extent to which results agree.*
+
+```{r}
+# create a interpregnancy variable
 birthwt <- birthwt %>%
   arrange(mother.id, birth.order) %>%
   group_by(mother.id) %>%
   mutate(interpregnancy = maternal.age - lag(maternal.age))
 birthwt
 
+# distribution of interpregnancy interval
+birthwt %>%
+  filter(!is.na(interpregnancy)) %>%
+  ggplot(aes(x = interpregnancy, y = ..density..)) +
+  geom_histogram()
+```
+
+## Visualizing relationships with birth weight
+
+1. Produce a spaghetti plot of birth weights versus birth order, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+
+(a) Color the plot by (i) age group, (ii) interpregnancy interval group?
+
+2. Produce boxplots of birth weights across birth order for all mothers, marking the threshold for low birth weight. Is there a visual trend?
+
+3. Produce boxplots of maternal age across birth order for all mothers, marking the threshold for low birth weight. Is there a visual trend?
+
+(a) Color the plot by (i) low / not low birth weight
+
+4. Produce a spaghetti plot of birth weights versus maternal age, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+
+(a) Color the plot by (i) age group, (ii) interpregnancy interval group?
+
+5. Produce a spaghetti plot of percent in birth weight group versus maternal age. Repeat for number in birth weight group versus maternal age. Compare the two. Does the most common birth weight group change as mothers age?
+
+
+
+# Modeling
+
+## Modeling birth weight from interpregnancy interval (and more?)
+
+Consider two response variables: birth weight, which is a continuous variable measured in grams, and low-weight birth, a binary indicator variable.
+
+1. Model birth weight using a linear mixed effects model and interpret its coefficients.
+
+2. Model birth weight using a linear fixed effects model and interpret its coefficients.
+
+3. Compare the estimates and standard errors of the two models. Do they suggest different conclusions about effects? Do you believe a nonlinear model is well-motivated?
+
+4. Model low-weight birth using logistic regression and interpret its coefficients.
+
+\pagebreak
+
+## Birth weight vs covariates
+
+Covariates: Maternal age, interpregnancy interval, birth order
+
+```{r}
 # plot birth weight vs maternal age
 birthwt %>%
   ggplot(aes(x = maternal.age, y = birth.weight)) +
@@ -69,8 +201,15 @@ birthwt %>%
   geom_jitter(width = 0.1, height = 0, alpha = 0.3) +
   geom_smooth(method = "loess", se = F)
 
-# plot birth weight vs inter-pregnancy interval
+
+# plot birth weight vs interpregnancy interval
 birthwt %>%
   ggplot(aes(y = birth.weight, x = interpregnancy)) +
+  geom_point()
+
+
+# plot birth weight vs birth order
+birthwt %>%
+  ggplot(aes(y = birth.weight, x = birth.order)) +
   geom_point()
 ```
