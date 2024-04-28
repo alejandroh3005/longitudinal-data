@@ -9,7 +9,10 @@ subtitle: Department of Biostatistics @ University of Washington
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = T, message = F, warning = F)
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+options(knitr.kable.NA = '-')
+labs = knitr::all_labels()
+labs = labs[!labs %in% c("setup", "llm_appendix", "allcode")]
 
 # load relevant libraries
 library(ggplot2)  # plotting
