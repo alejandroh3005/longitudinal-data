@@ -65,10 +65,6 @@ Factors that are believed to cause low birth weight include maternal health and 
 
 3. Describe the distribution of each mother’s average birth weight. How does this distribution compare to that of all birth weights?
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 ```{r birth-weight, fig.height = 5, fig.width = 6, fig.cap = "Distributions of birth weight with thresholds of low (blue) and very low (red) birth weight"}
 ##################################################################
 # Birth weight
@@ -93,11 +89,14 @@ birthwt %>%
 
 # size of each quartile
 birthwt %>%
-  mutate(quartile = cut(birth.weight, 
-                        breaks = quantile(birthwt$birth.weight), 
-                        include.lowest = T)) %>%
-  group_by(quartile) %>%
-  summarize(n = length(quartile))
+  mutate(quartile.range = cut(birth.weight, 
+                              breaks = quantile(birthwt$birth.weight),
+                              include.lowest = T)) %>%
+  group_by(quartile.range) %>%
+  summarize(n = length(quartile.range)) %>%
+  mutate(quartile = 1:4) %>%
+  select(Quartile=quartile, Range=quartile.range, Size=n) %>%
+  kable(caption = "Quantiles of birth weight")
 
 # number of low births
 birthwt %>%
@@ -108,7 +107,8 @@ birthwt %>%
                              levels = c("Not low", "Low", "Very low"))) %>%
   group_by(low.weight) %>%
   summarize(n = length(low.weight),
-            prop = round(n / nrow(.), 2))
+            prop = round(n / nrow(.), 2)) %>%
+  kable(caption = "Sizes of birth weight groups")
 
 # distribution of all birth weights
 gg_bw_all <- birthwt %>%
@@ -174,11 +174,13 @@ birthwt %>%
 
 # size of each quartile
 birthwt %>%
-  mutate(quartile = cut(maternal.age, 
-                        breaks = quantile(birthwt$maternal.age), 
-                        include.lowest = T)) %>%
-  group_by(quartile) %>%
-  summarize(n = length(quartile))
+  mutate(quartile.range = cut(maternal.age,
+                              breaks = quantile(birthwt$maternal.age),
+                              include.lowest = T)) %>%
+  group_by(quartile.range) %>%
+  summarize(n = length(quartile.range)) %>%
+  mutate(quartile = 1:4) %>%
+  kable(caption = "Quantiles of maternal age")
 
 # condensed version of above code (this has worse readability):
 # table(cut(birthwt$maternal.age,
@@ -192,13 +194,10 @@ birthwt %>%
                         right = F)) %>%
   group_by(age.group) %>%
   summarize(n = length(age.group),
-            prop = round(n / nrow(.), 2))
-<<<<<<< HEAD
+            prop = round(n / nrow(.), 2)) %>%
+  kable(caption = "Sizes of age groups", 
+        col.names = c("Age group", "Size", "Proportion"))
 
-=======
-=======
-```{r}
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 # numeric summary of birth weight
 round(c(Mean = mean(birthwt$birth.weight), 
         quantile(birthwt$birth.weight),
@@ -228,10 +227,6 @@ birthwt %>%
   geom_vline(xintercept = c(1500, 2500), color = c("red", "blue")) +
   geom_vline(xintercept = quantile(birthwt$birth.weight), color = "grey") + 
   theme_bw()
-<<<<<<< HEAD
-=======
->>>>>>> 3429ef522eeb2f1df1414c0ecaa1cd43d021e574
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 
 # distribution of mothers' average birth weight
 birthwt %>%
@@ -240,18 +235,8 @@ birthwt %>%
   ggplot(aes(x = avg.weight, y = ..density..)) + 
     geom_histogram() +   
     geom_vline(xintercept = c(1500, 2500), color = c("red", "blue"))
-
 ```
 
-## Maternal age
-
-**Maternal age** is the age at which a mother gives birth. Previous studies suggest that maternal age is associated with birth weight (younger and older mothers have greater rates of preterm births).
-
-1. What are the quartiles and average maternal age among all mothers? What quantile defines the thresholds of middle aged? How many births fall into each quantile and each category of (young / middle age)?
-
-2. Describe the distribution of all maternal ages.
-
-3. Describe the distribution of each mother’s average maternal age. How does this distribution compare to that of all maternal ages?
 
 ```{r}
 # distribution of maternal age
@@ -259,10 +244,6 @@ birthwt %>%
   ggplot(aes(x = maternal.age, y = ..density..)) +
   geom_histogram()
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 # distribution of all maternal ages
 gg_ma_all <- birthwt %>%
   ggplot(aes(x = maternal.age, y = after_stat(density))) +
@@ -292,11 +273,6 @@ gg_ma_indv <- birthwt %>%
 gridExtra::grid.arrange(gg_ma_all, gg_ma_indv)
 ```
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 3429ef522eeb2f1df1414c0ecaa1cd43d021e574
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 ## Interpregnancy interval
 
 **Interpregnancy interval** is the time elapsed between one child’s birth and the subsequent child’s conception, often measured in months. This interval can be brief: mothers may become pregnant as early as four weeks after delivery.4 Similar to maternal age, extremely short and long intervals are associated with health risks for the mother and second-born child. Interpregnancy intervals less than 18 months introduce moderate risk to children and significant risk is associated with intervals shorter than 6 months; intervals greater than 5-10 years is associated with increased risk of adverse health outcomes for both mother and child.4
@@ -312,22 +288,12 @@ With available data, our best estimate of this interval is the difference in mat
 *Interdelivery interval is the time elapsed between two subsequent births. May we more accurately estimate this interval using our data? Not necessarily- the accuracy of using the difference in maternal ages to estimate an interpregnancy versus an interdelivery interval varies by situation and relies on information unavailable to us. We have no workaround for this issue, other than to define short and long intervals according to respective thresholds (which differ by ?? 9 months?) and examine the extent to which results agree.*
 
 ```{r}
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 ##################################################################
 # Interpregnancy interval
 ##################################################################
 
 # create an interval variable
-<<<<<<< HEAD
 # create a interpregnancy variable
-=======
-=======
-# create a interpregnancy variable
->>>>>>> 3429ef522eeb2f1df1414c0ecaa1cd43d021e574
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 birthwt <- birthwt %>%
   arrange(mother.id, birth.order) %>%
   group_by(mother.id) %>%
@@ -335,27 +301,10 @@ birthwt <- birthwt %>%
 
 birthwt
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
 # distribution of maternal age interval
 birthwt %>%
   filter(!is.na(interval)) %>%
   ggplot(aes(x = interval, y = ..density..)) +
-<<<<<<< HEAD
-
-=======
-=======
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
-# distribution of interpregnancy interval
-birthwt %>%
-  filter(!is.na(interpregnancy)) %>%
-  ggplot(aes(x = interpregnancy, y = ..density..)) +
-<<<<<<< HEAD
-=======
->>>>>>> 3429ef522eeb2f1df1414c0ecaa1cd43d021e574
->>>>>>> 8464e120f997a8a87daa06d8f1d62ce2d0032d33
   geom_histogram()
 ```
 
