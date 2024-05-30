@@ -24,12 +24,40 @@ birthwt <- read.csv("data/cdc birthwt.csv")
 
 names(birthwt) <- c("mother.id", "birth.order", "birth.weight", "maternal.age", "child.id")
 
-# create maternal age factor
+# define breaks in maternal age factor
 breaks <- c(min(birthwt$maternal.age), 20, 30, 40,
             max(birthwt$maternal.age))
+
 birthwt <- birthwt %>%
-  mutate(maternal.age.factor = cut(maternal.age, breaks=breaks,
-                                   include.lowest = T))
+  mutate(
+    # create maternal age factor    
+    maternal.age.factor = cut(maternal.age, breaks=breaks, include.lowest = T),
+    # create birth weight factor
+    birth.weight.factor = ifelse(birth.weight < 2500,
+                                      ifelse(birth.weight < 1500,
+                                             "Very low (less than 1500g)",
+                                             "Low (less than 2500g)"),
+                                      "Not low"),
+    # create birth weight binary factor
+    birth.weight.binary = ifelse(birth.weight < 2500,
+                                 "Low (less than 2500g)",
+                                 "Not low")) %>%
+  # define birth order (and above) as factors
+  mutate_at(vars(birth.order, birth.weight.factor, birth.weight.binary), 
+            as.factor)
+
+# create a interpregnancy variable
+birthwt <- birthwt %>%
+  arrange(mother.id, birth.order) %>%
+  group_by(mother.id) %>%
+  mutate(interval = maternal.age - lag(maternal.age)) %>%
+  ungroup()
+
+birthwt %>% filter(interval < 0) 
+# mothers 57939 and 212988 both have negative intervals for their third births
+# we will remove all their data and do not expect measurable changes in future 
+# analysis, their data is not special among the sample
+birthwt <- birthwt %>% filter(!mother.id %in% c(57939, 212988))
 ```
 
 ### Validation
@@ -38,13 +66,12 @@ birthwt <- birthwt %>%
 # validate each mother has 5 children
 birthwt %>%
   group_by(mother.id) %>%
-  summarize(n = length(birth.order)) %>%
-  all(.$n == 5)
+  summarize(Count = n()) %>%
+  all(.$Count == 5)
   
 # summarize numeric variables
 birthwt %>% 
-  select(birth.order, birth.weight, maternal.age) %>% 
-  mutate_at("birth.order", as.factor) %>%
+  select(birth.weight, maternal.age) %>% 
   summary
 ```
 # Exploratory data analysis
@@ -89,26 +116,25 @@ birthwt %>%
 
 # size of each quartile
 birthwt %>%
-  mutate(quartile.range = cut(birth.weight, 
+  mutate(quartile.range = cut(birth.weight,
                               breaks = quantile(birthwt$birth.weight),
-                              include.lowest = T)) %>%
+                              include.lowest = TRUE,
+                              dig.lab = 5)) %>%
   group_by(quartile.range) %>%
   summarize(n = length(quartile.range)) %>%
   mutate(quartile = 1:4) %>%
   select(Quartile=quartile, Range=quartile.range, Size=n) %>%
-  kable(caption = "Quantiles of birth weight")
+  kable(caption = "Quartiles of birth weight")
 
 # number of low births
 birthwt %>%
-  mutate(low.weight = ifelse(birth.weight < 2500, 
-                             ifelse(birth.weight < 1500, "Very low", "Low"), 
-                             "Not low"),
-         low.weight = factor(low.weight, 
-                             levels = c("Not low", "Low", "Very low"))) %>%
-  group_by(low.weight) %>%
-  summarize(n = length(low.weight),
+  group_by(birth.weight.factor) %>%
+  summarize(n = length(birth.weight.factor),
             prop = round(n / nrow(.), 2)) %>%
-  kable(caption = "Sizes of birth weight groups")
+  arrange(desc(n)) %>%
+  select(birth.weight.factor, n, prop) %>%
+  kable(caption = "Sizes of birth weight groups",
+        col.names = c("Weight group", "N", "Proportion"))
 
 # distribution of all birth weights
 gg_bw_all <- birthwt %>%
@@ -150,10 +176,9 @@ gridExtra::grid.arrange(gg_bw_all, gg_bw_indv)
 
 3. Describe the distribution of each mother’s average maternal age. How does this distribution compare to that of all maternal ages?
 
-```{r maternal-age, fig.height = 5, fig.width = 6, fig.cap = "Distributions of maternal age"}
+```{r maternal-age, fig.height = 5, fig.width = 6, fig.cap = "Distributions of maternal age and average maternal age. Average maternal age is average age of a mother over their five births- it is unique to each mother."}
 ##################################################################
 # Maternal age
-##################################################################
 
 # numeric summary of maternal age
 round(c(mean = mean(birthwt$maternal.age),
@@ -176,11 +201,13 @@ birthwt %>%
 birthwt %>%
   mutate(quartile.range = cut(maternal.age,
                               breaks = quantile(birthwt$maternal.age),
-                              include.lowest = T)) %>%
+                              include.lowest = TRUE)) %>%
   group_by(quartile.range) %>%
   summarize(n = length(quartile.range)) %>%
   mutate(quartile = 1:4) %>%
-  kable(caption = "Quantiles of maternal age")
+  select(quartile, quartile.range, n) %>%
+  kable(caption = "Quantiles of maternal age", 
+        col.names = c("Quartile", "Range", "Size"))
 
 # condensed version of above code (this has worse readability):
 # table(cut(birthwt$maternal.age,
@@ -188,61 +215,18 @@ birthwt %>%
 #           include.lowest = T))
 
 # size of each age group
-birthwt %>%
+birthwt <- birthwt %>%
+  # create new age group variable
   mutate(age.group = cut(maternal.age, 
                         breaks = c(0, 18, 25, 35, 45),
-                        right = F)) %>%
+                        right = F)) 
+
+birthwt %>%
   group_by(age.group) %>%
   summarize(n = length(age.group),
             prop = round(n / nrow(.), 2)) %>%
-  kable(caption = "Sizes of age groups", 
-        col.names = c("Age group", "Size", "Proportion"))
-
-# numeric summary of birth weight
-round(c(Mean = mean(birthwt$birth.weight), 
-        quantile(birthwt$birth.weight),
-        IQR = IQR(birthwt$birth.weight)), 2)
-
-# size of each quantile
-birthwt %>%
-  mutate(quartile = cut(birth.weight, 
-                        breaks = quantile(birthwt$birth.weight, names = F), 
-                        include.lowest = T,
-                        labels = c("Q1","Q2","Q3","Q4"))) %>%
-  group_by(quartile) %>%
-  summarize(n = length(quartile))
-
-# number of low births
-birthwt %>%
-  mutate(low.weight = ifelse(birth.weight < 2500, 
-                             ifelse(birth.weight < 1500, "Very low", "Low"), 
-                             "Not low")) %>%
-  group_by(low.weight) %>%
-  summarize(n = length(low.weight))
-
-# distribution of all birth weights
-birthwt %>%
-  ggplot(aes(x = birth.weight, y = ..density..)) +
-  geom_histogram() +
-  geom_vline(xintercept = c(1500, 2500), color = c("red", "blue")) +
-  geom_vline(xintercept = quantile(birthwt$birth.weight), color = "grey") + 
-  theme_bw()
-
-# distribution of mothers' average birth weight
-birthwt %>%
-  group_by(mother.id) %>%
-  summarize(avg.weight = mean(birth.weight)) %>%
-  ggplot(aes(x = avg.weight, y = ..density..)) + 
-    geom_histogram() +   
-    geom_vline(xintercept = c(1500, 2500), color = c("red", "blue"))
-```
-
-
-```{r}
-# distribution of maternal age
-birthwt %>%
-  ggplot(aes(x = maternal.age, y = ..density..)) +
-  geom_histogram()
+  kable(caption = "Sizes of maternal age groups", 
+        col.names = c("Group", "Size", "Proportion"))
 
 # distribution of all maternal ages
 gg_ma_all <- birthwt %>%
@@ -292,40 +276,241 @@ With available data, our best estimate of this interval is the difference in mat
 # Interpregnancy interval
 ##################################################################
 
-# create an interval variable
-# create a interpregnancy variable
-birthwt <- birthwt %>%
-  arrange(mother.id, birth.order) %>%
-  group_by(mother.id) %>%
-  mutate(interval = maternal.age - lag(maternal.age))
-
-birthwt
-
 # distribution of maternal age interval
 birthwt %>%
-  filter(!is.na(interval)) %>%
-  ggplot(aes(x = interval, y = ..density..)) +
-  geom_histogram()
+  filter(!is.na(interval) & interval >= 0) %>%
+  group_by(Interval = interval) %>%
+  summarize(Count = n()) %>%
+  mutate(Percentage = paste(round(100 * Count/sum(Count), 2), "%", sep = "")) %>%
+  kable()
 ```
 
 ## Visualizing relationships with birth weight
 
-1. Produce a spaghetti plot of birth weights versus birth order, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+### Boxplots
 
-(a) Color the plot by (i) age group, (ii) interpregnancy interval group?
+1. Produce boxplots of birth weights across birth order for all mothers, marking the threshold for low birth weight. Is there a visual trend?
 
-2. Produce boxplots of birth weights across birth order for all mothers, marking the threshold for low birth weight. Is there a visual trend?
+```{r task-1}
+gg1.weight.order <- birthwt %>%
+  ggplot(aes(x = birth.order, y = birth.weight, group = birth.order, 
+             color = birth.order)) +
+    geom_boxplot(outlier.shape = NA) + 
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Birth order") + ylab("Birth weight (g)") +
+    theme_bw()
 
-3. Produce boxplots of maternal age across birth order for all mothers, marking the threshold for low birth weight. Is there a visual trend?
+gg1.weight.order
+```
 
-(a) Color the plot by (i) low / not low birth weight
+(a) Stratify the plot by low / not low birth weight
 
-4. Produce a spaghetti plot of birth weights versus maternal age, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+```{r task-1a}
+gg1.weight.order + facet_wrap(vars(birth.weight.binary))
+```
 
-(a) Color the plot by (i) age group, (ii) interpregnancy interval group?
+(b) Stratify the plot by very low / low / not low birth weight
 
-5. Produce a spaghetti plot of percent in birth weight group versus maternal age. Repeat for number in birth weight group versus maternal age. Compare the two. Does the most common birth weight group change as mothers age?
+```{r task-1b}
+gg1.weight.order + facet_wrap(vars(birth.weight.factor))
+```
 
+2. Produce a boxplot of birth weight across maternal age for all mothers, marking the threshold for low birth weight. Is there a visual trend? 
+
+```{r task-2}
+gg2.weight.age <- birthwt %>%
+  ggplot(aes(x = maternal.age, y = birth.weight)) +
+    geom_smooth(se = F) + 
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + ylab("Birth weight (g)") +
+    theme_bw()
+
+gg2.weight.age
+```
+
+(a) Stratify the plot by low / not low birth weight
+
+```{r task-2a}
+gg2a.weight.age <- birthwt %>%
+  ggplot(aes(x = maternal.age, y = birth.weight, 
+             group = birth.weight.binary, color = birth.weight.binary)) +
+    geom_smooth(se = F) + 
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    # geom_hline(yintercept = 2500, color = "blue") +
+    # geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + ylab("Birth weight (g)") +
+    theme_bw()
+
+gg2a.weight.age
+```
+
+(b) Stratify the plot by very low / low / not low birth weight
+
+```{r task-2b}
+gg2b.weight.age <- birthwt %>%
+  ggplot(aes(x = maternal.age, y = birth.weight, 
+             group = birth.weight.factor, color = birth.weight.factor)) +
+    geom_smooth(se = F) + 
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    # geom_hline(yintercept = 2500, color = "blue") +
+    # geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + ylab("Birth weight (g)") +
+    theme_bw()
+
+gg2b.weight.age
+```
+
+(c) Repeat the above for birth weight across maternal age factor
+
+```{r task-2c}
+# using age grouped by decade
+gg2c.weight.age <- birthwt %>%
+  ggplot(aes(x = maternal.age.factor, y = birth.weight)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + ylab("Birth weight (g)") +
+    theme_bw()
+
+gg2c.weight.age
+
+# using age grouped by popular age cutoffs
+gg2c.weight.age <- birthwt %>%
+  ggplot(aes(x = age.group, y = birth.weight)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + ylab("Birth weight (g)") +
+    theme_bw()
+
+gg2c.weight.age
+```
+
+3. Produce boxplots of maternal age across birth order for all mothers. Is there a visual trend?
+
+```{r task-3}
+gg3.age.order <- birthwt %>%
+  ggplot(aes(x = birth.order, y = maternal.age, group = birth.order, 
+             color = birth.order)) +
+    geom_boxplot(outlier.shape = NA) + 
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    xlab("Birth order") + ylab("Maternal age (yr)") +
+    theme_bw()
+
+gg3.age.order
+```
+
+(a) Stratify the plot by low / not low birth weight
+
+```{r task-3a}
+gg3.age.order + facet_wrap(vars(birth.weight.binary))
+```
+
+(b) Stratify the plot by very low / low / not low birth weight
+
+```{r task-3b}
+gg3.age.order + facet_wrap(vars(birth.weight.factor))
+```
+
+4. Produce a boxplot of birth weight across interval for non-firstborns (such that interval is defined), marking the threshold for low birth weight. Is there a visual trend?
+
+```{r task-4}
+gg4.weight.interval <- birthwt %>%
+  filter(!is.na(interval)) %>%
+  ggplot(aes(x = interval, y = birth.weight, group = interval)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Change in maternal age since last birth (yr)") + 
+    ylab("Birth weight (g)") +
+    theme_bw()
+
+gg4.weight.interval
+```
+
+(a) Stratify the plot by low / not low birth weight
+
+```{r task-4a}
+gg4.weight.interval + facet_wrap(vars(birth.weight.binary))
+```
+
+(b) Stratify the plot by very low / low / not low birth weight
+
+```{r task-4b}
+gg4.weight.interval + facet_wrap(vars(birth.weight.factor))
+```
+
+5. Produce a boxplot of interval across birth order for all non-firstborns (such that interval is defined). Is there a visual trend?
+
+```{r task-5}
+gg5.interval.order <- birthwt %>%
+  filter(!is.na(interval)) %>%
+  ggplot(aes(x = birth.order, y = interval, group = birth.order, 
+             color = birth.order)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.1) +
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    xlab("Birth order") + ylab("Change in maternal age since last birth (yr)") +
+    theme_bw()
+
+gg5.interval.order
+```
+(a) Stratify the plot by low / not low birth weight
+
+```{r task-5a}
+gg5.interval.order + facet_wrap(vars(birth.weight.binary))
+```
+
+(b) Stratify the plot by very low / low / not low birth weight
+
+```{r task-5b}
+gg5.interval.order + facet_wrap(vars(birth.weight.factor))
+```
+
+6. Produce a boxplot of maternal age across interval for all non-firstborns (such that interval is defined). Is there a visual trend?
+
+```{r task-6}
+gg6.interval.age <- birthwt %>%
+  filter(!is.na(interval)) %>%
+  ggplot(aes(x = interval, y = maternal.age, group = interval,
+             color = as.factor(interval))) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.1, alpha = 0.2) +
+    xlab("Change in maternal age since last birth (yr)") + 
+    ylab("Maternal age (yr)") +
+    theme_bw()
+
+gg6.interval.age
+```
+(a) Stratify the plot by low / not low birth weight
+
+```{r task-6a}
+gg6.interval.age + facet_wrap(vars(birth.weight.binary))
+```
+(b) Stratify the plot by very low / low / not low birth weight
+
+```{r task-6b}
+gg6.interval.age + facet_wrap(vars(birth.weight.factor))
+```
+
+### Spaghetti plots
+
+7. Produce a spaghetti plot of birth weights versus birth order, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+(a) Color the plot by age group
+(b) Color the plot by interval
+
+
+8. Produce a spaghetti plot of birth weights versus maternal age, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+(a) Color the plot by (i) age group, (ii) interval
+
+
+9. Produce a spaghetti plot of percent in birth weight group versus maternal age. Repeat for number in birth weight group versus maternal age. Compare the two. Does the most common birth weight group change as mothers age?
 
 
 # Modeling

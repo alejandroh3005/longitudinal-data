@@ -1,0 +1,272 @@
+---
+title: 'Biost 540: Homework 3'
+author: "Alejandro Hernandez"
+date: "Due May 30, April 2024"
+output:
+  pdf_document: default
+  html_document: default
+subtitle: Department of Biostatistics @ University of Washington
+---
+
+```{r setup, include=FALSE}
+# setup
+knitr::opts_chunk$set(echo = F, message = F, warning = F, cache = F)
+options(knitr.kable.NA = '-')
+labs = knitr::all_labels()
+labs = labs[!labs %in% c("setup", "llm_appendix", "allcode")]
+
+# clear workspace
+rm(list = ls())
+# load relevant libraries
+library(tidyverse)    # data manipulation
+library(knitr)    # pretty printing data frames
+# library(nlme)     # (non)linear mixed effects modeling
+library(lme4)
+# library(joineR)
+library(geepack)
+
+# color selection
+colors <- c("#FC600A", # dark orange
+            "#C21460", # dark pink
+            "#3F0000") # darker red
+```
+
+# Problem 1
+
+In this problem, we will still focus on the Framingham study which we have explored in HW2. Please check the detailed description from HW2. For the pre processing step, please follow the instruction of HW2 Question2 a and b (You can basically use the code in solution). Incorrect pre processing may result in wrong results for this homework.
+
+```{r problem-1, fig.cap="Cholesterol levels and averages over time by sex"}
+#########################
+### Question 1
+#########################
+
+# read in Framingham data
+FRM_wide <- read.table("data/framingham.dat",
+                      col.names = c("age0", "sex", "bmi0", "bmi10", "cigarette",
+                                "chol_0", "chol_2", "chol_4", "chol_6", 
+                                "chol_8", "chol_10", "death"))
+FRM_wide <- FRM_wide %>%
+  # create new ID column and position it first
+  dplyr::mutate(id = 1:nrow(FRM_wide)) %>%
+  dplyr::select(id, names(FRM_wide)) %>%
+  # rename levels of sex
+  mutate(sex = ifelse(sex == 1, "Male", "Female"))
+
+
+# reformat a long format
+FRM_long <- FRM_wide %>%
+  tidyr::pivot_longer(cols = dplyr::starts_with("chol_"),
+                      names_to = "year",
+                      names_prefix = "chol_",
+                      values_to = "chl") %>%
+  # correct `year` to numeric
+  dplyr::mutate_at("year", as.integer)
+
+# convert instances of -9 to NA and remove NAs
+FRM_long <- replace(FRM_long, FRM_long == -9, NA) %>% tidyr::drop_na()
+
+# produce a spaghetti plot of cholesterol over time for first 100 subjects
+FRM_long %>%
+  ggplot(aes(x = year, y = chl)) +
+    geom_line(aes(group = id), alpha = 0.1, color = colors[1]) +
+    geom_point(data = FRM_long %>%
+                 group_by(year) %>%
+                 summarize(mean = mean(chl)),
+               aes(x = year, y = mean), size = 2.5, color = colors[3]) +
+  xlab("Study year") + ylab("Serum cholesterol (mg/dL)") + 
+  scale_x_continuous(breaks = seq(0,10,2)) +
+  theme_bw() + 
+  facet_wrap(vars(sex))
+```
+
+### (a)
+
+In HW2, we have studied how cholesterol level changes over time and how it is related to baseline age, sex, and baseline BMI without considering interactions. Please provide statistical evidence on whether the relation between cholesterol level and time will change for different sexes. You could just focus on LMM with random intercept and slope. And please treat time as continuous variable instead of categorical variable.
+
+```{r problem-1a, fig.cap="Cholesterol level over time by sex"}
+# Fit the linear mixed-effects model
+# Random intercept and random slope for each subject
+lmm_model <- lme4::lmer(chl ~ year * sex + age0 + bmi0 + (year | id),
+                        data = FRM_long)
+
+# Summary of the model to examine the fixed effects
+lmm_model %>% summary %>% coef %>% 
+  knitr::kable(digits = 3, 
+               caption = "Coefficient estimates from linear mixed-effect model")
+
+# Plot the fitted model to visualize the interaction effect
+# FRM_long %>% 
+#   ggplot(aes(x = year, y = chl, color = sex)) +
+#     geom_jitter(width = 0.5, alpha = 0.4) +
+#     geom_line(aes(y = predict(lmm_model))) +
+#     theme_bw() +
+#     scale_x_continuous(breaks = seq(0,10,2)) +
+#     xlab("Study year") + ylab("Serum cholesterol (mg/dL)")
+
+```
+From a linear mixed effects model, we estimate that cholesterol over time increases, on average, for both female and male participants. The rate of increase between male and females differs on average by 1.11 (95% CI: 1.24, 0.97) units (with the female group having the higher average rate of increase). Therefore, we conclude that the rate of change in cholesterol over time differ significantly between sexes.
+
+### (b)
+
+Based on your conclusion from 2a, please fit GEE models using same covariates(i.e. If you think there should be interaction, you should include it in your GEE models.) but with independent, exchangeable and AR1 working correlation matrix.
+
+```{r problem-1b}
+# Fit GEE model with independent working correlation structure
+gee_independent <- geepack::geeglm(chl ~ year * sex + age0 + bmi0,
+                                   id = id, data = FRM_long,
+                                   corstr = "independence")
+
+# Fit GEE model with exchangeable working correlation structure
+gee_exchangeable <- geeglm(chl ~ year * sex + age0 + bmi0,
+                           id = id, data = FRM_long, 
+                           corstr = "exchangeable")
+
+# Fit GEE model with AR(1) working correlation structure
+gee_ar1 <- geeglm(chl ~ year * sex + age0 + bmi0,
+                  id = id, data = FRM_long, 
+                  corstr = "ar1")
+```
+
+### (c)
+
+Please make a neat table to compare the results of LMM model in 2a and 2 GEE models(independence, exchangeable) in 2b. You should include estimates and sd of coefficients. What conclusion could you draw from the comparison. Please keep the result to three decimal places.
+
+```{r problem-1c}
+# Summary of the models
+cbind(
+  lmm_model %>% summary %>% coef %>% data.frame %>%
+    select(GEE.indp = Estimate, SE = Std..Error),
+  gee_independent %>% summary %>% coef %>% 
+    select(GEE.indp = Estimate, SE = Std.err),
+  gee_exchangeable %>% summary %>% coef %>% 
+    select(GEE.indp = Estimate, SE = Std.err)) %>%
+  # pretty print
+  kable(digits = 3, 
+        caption = "Coefficient estimates and corresponding standard errors")
+```
+
+Table 1 shows coefficient estimates and corresponding standard errors for linear mixed-effects model (LMM) and generalized estimating equation (GEE) models with independent and exchangeable working correlations.
+
+# Problem 2
+
+Consider the Six City data set which describes Mother’s smoking behavior and childhood respiratory disease. Columns are id: Child’s ID, resp: binary indicator of respiratory disease, age: standardized age (ages 6-9 minus 8), smok: mother’s smoking, aXs: interaction of age and smoke.
+
+```{r problem-2}
+#########################
+### Question 2
+#########################
+
+# clear workspace
+rm(list = ls())
+
+# read in data
+sixcity_long <- read.csv("data/sixcity-1.csv", col.names = c("X", "id", 
+                        "disease", "age", "smoke", "ageXsmoke")) %>% select(-X)
+# head(sixcity_long)
+```
+
+### (a)
+
+Please fit a GLMM, GEE, and transition model regressing indicator of respiratory disease on age, maternal smoking status, and interactions. Describe the output of each model (you can focus on the smoke variable when printing output). Also provide a brief description of how the assumptions made by each model differ from one another. Hint: see Lecture 3 pg 49, 56, 64 for help with interpretation and assumptions.
+
+```{r}
+# Fit GLMM
+glmm_model <- lme4::glmer(disease ~ age + smoke + ageXsmoke + (1 | id),
+                          data = sixcity_long, 
+                          family = binomial)
+
+# Fit GEE model
+gee_model <- geeglm(disease ~ age + smoke + ageXsmoke, id = id,
+                    data = sixcity_long, 
+                    family = binomial, corstr = "exchangeable")
+
+# Fit transition Model
+transition_model <- sixcity_long %>%
+  # arrange complete cases of id and age
+  tidyr::complete(id, age) %>%
+  dplyr::arrange(id, age) %>%
+  # create a lag variable for disease and remove NA values
+  dplyr::group_by(id) %>%
+  mutate(disease.lag = dplyr::lag(disease, default=NA)) %>%
+  na.omit %>%
+  # fit transition model from complete data with lag variable
+  geeglm(disease ~ age + smoke + ageXsmoke + disease.lag, id = id, data = ., 
+         family = binomial, corstr = "independence")
+
+# Summary of the models
+cbind(
+  # add NA rows for GLMM and GEE columns (they do not have lag variable)
+  glmm_model %>% summary %>% coef %>% data.frame %>% 
+    select(GLMM = Estimate, SE = Std..Error) %>% rbind(disease.lag = rep(NA, 2)),
+  gee_model %>% summary %>% coef %>% 
+    select(GEE = Estimate, SE = Std.err) %>% rbind(rep(NA, 2)),
+  transition_model %>% summary %>% coef %>%
+    select(Transition = Estimate, SE = Std.err)) %>%
+  # pretty print
+  kable(digits = 3, caption = "Estimates and corresponding standard errors")
+```
+
+# Problem 3
+
+Consider the seizure dataset. The study consisted of 59 patients randomized to the anti-epileptic drug progabide, or to placebo in addition to standard chemotherapy. Over an 8-week period prior to randomization, a “baseline” number of seizures was recorded for each participant. Over four subsequent follow-up time periods the number of seizures in each 2-week period was recorded. Listed below are the variables in the dataset + id: patient id + age: age of the patient + tx: treatment (placebo or progabide) + y0, y1, y2, y3, y4: number of seizures by visit times subjects were randomized. y0 refers to the baseline number of seizures.
+
+We are interested in evaluating whether the drug progabide is effective at reducing the rate of epileptic seizures?
+
+```{r problem-3}
+#########################
+### Question 3
+#########################
+
+# read in data
+seizure_wide <- read.csv("data/Seizure.csv")
+# seizure_wide %>% head
+
+# convert to long format
+seizure_long <- seizure_wide %>%
+  pivot_longer(cols = starts_with("y"),
+                      names_to = "biweek",
+                      names_prefix = "y",
+                      values_to = "seizures") %>%
+  # redefine biweek to week (values from 0,1,2,3,4 to 0,2,4,6,8)
+  mutate(week = 2L * as.integer(biweek)) %>% 
+  select(-X, -biweek)
+# seizure_long %>% head
+```
+
+### (a)
+
+Produce a graphical/tabular summary of the rates of seizure incidence at baseline and over the subsequent study visits by treatment arm. Feel free to summarize the individual rates and/or the average rates within each arm. Also pay particular attention to the length of the ``at risk” period at each time point and use informative labels for study visits.
+
+```{r problem-3a}
+# produce a spaghetti plot of seizure rates over time 
+
+
+# FRM_long %>%
+#   ggplot(aes(x = year, y = chl)) +
+#     geom_line(aes(group = id), alpha = 0.1, color = colors[1]) +
+#     geom_point(data = FRM_long %>%
+#                  group_by(year) %>%
+#                  summarize(mean = mean(chl)),
+#                aes(x = year, y = mean), size = 2.5, color = colors[3]) +
+#   xlab("Study year") + ylab("Serum cholesterol (mg/dL)") + 
+#   scale_x_continuous(breaks = seq(0,10,2)) +
+#   theme_bw() + 
+#   facet_wrap(vars(sex))
+```
+
+### (b)
+
+Describe and fit a Poisson Generalized Estimating Equation (GEE) to the data to evaluate whether treatment has an effect on the rate of seizures. Consider relevant covariate adjustments. Be sure to provide a relevant interpretation of your model: describe the parameter estimate and 95% CI and the conclusion you draw from the hypothesis test. Also, discuss the implications of working correlation specification on the validity of your inference. Hint 1: include an log observation time as an offset in your model to ensure the rate is being modelled. See Lecture 3 Slide 45 for details. Hint 2: the poisson GEE should return coefficients on the log incidence rate ratio scale. You may want to report the exponentiated coefficients, which correspond to the fold changes in incidence rates associated with predictors. Hint 3: Also you may need to use the deltamethod function from the msm package if your model uses an interaction.
+
+```{r problem-3b}
+
+```
+
+\pagebreak
+
+## Code Appendix
+
+```{r allcode, ref.label = knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+
+**End of document.**

@@ -1,0 +1,172 @@
+---
+title: "HW 2"
+author: "Ethan Ashby & Yimin Zhao"
+date: "2024-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=F, warning=F, cache = T)
+library(tidyverse)
+library(lme4)
+library(joineR)
+library(knitr)
+library(nlme)
+```
+
+# Question 1
+
+In the National Cooperative Gallstone Study (NCGS), one of the major interests was to study the safety of the drug chenodiol for the treatment of cholesterol gallstones. In this study, patients were randomly assigned to high-dose (750 mg per day), low-dose (375 mg per day), or placebo. We focus on a subset of data on patients who had floating gallstones and who were assigned to the high-dose and placebo groups. In the NCGS it was suggested that chenodiol would dissolve gallstones but in doing so might increase levels of serum cholesterol. As a result, serum cholesterol (mg/dL) was measured at baseline and at 6, 12, 20 and 24 months of follow-up. Many cholesterol measurements are missing because of missed visits, laboratory specimens that were lost or inadequate, or patient follow-up that was terminated. The NCGS serum cholesterol data (cholesterol.csv) are stored in cholesterol.data posted on the course webpage. Each row of the dataset contains the following variables: 
+•	group: a categorical variable coded 1=high dose, 2=placebo
+•	index: subject index
+•	Y1, Y2, Y3, Y4, Y5: measurements of cholesterol at baseline and times 6, 12, 20 and 24 months
+
+(a) Produce a spaghetti plot of the evolution of cholesterol over time faceted by treatment group. Please label the x-axis using study time (weeks since baseline). Also label the facets according to treatment name (you can either use the `recode` function for this or edit the `group` column directly).
+
+```{r}
+
+chol<-read.csv("./cholesterol.csv")
+
+chol %>% 
+    mutate(group = recode(group, `1`="High dose", `2`="Placebo")) %>%
+    pivot_longer(cols=starts_with("y"), names_to="time", values_to="cholesterol") %>%
+    mutate(time = factor(recode(time, `y1`="Baseline", `y2`="Month 6", `y3`="Month 12", `y4`="Month 20", `y5`="Month 24"), levels=c("Baseline", "Month 6", "Month 12", "Month 20", "Month 24"))) %>%
+    ggplot(aes(x=time, y=cholesterol, group=id))+geom_line()+facet_wrap(~group)+
+  labs(y="Cholesterol (mg/dL)", x=NULL)
+```
+
+(b) Please produce a plot or table which characterizes the completeness/missingness in cholesterol measurements over time by treatment group. If plotting the data, be sure to include axis labels and text briefly describing what the plot is showing. If a tabular summary, please provide text or a caption describing what data the table is summarizing.
+
+```{r}
+chol %>%
+  mutate(group = recode(group, `1`="High dose", `2`="Placebo")) %>%
+  pivot_longer(cols=starts_with("y"), names_to="time", values_to="cholesterol") %>%
+  mutate(time = factor(recode(time, `y1`="Baseline", `y2`="Month 6", `y3`="Month 12", `y4`="Month 20", `y5`="Month 24"), levels=c("Baseline", "Month 6", "Month 12", "Month 20", "Month 24"))) %>%
+  group_by(group, time) %>%
+  summarise(n_miss = sum(is.na(cholesterol)), n=n()) %>%
+  mutate(header=paste0(group, " (n=", n, ")"), n_obs=n-n_miss) %>%
+  ungroup() %>%
+  dplyr::select(header, time, n_obs) %>%
+  pivot_wider(id_cols=c("time"), names_from="header", values_from = "n_obs") %>%
+  kable(caption="Summary table of the number of participants with observed cholesterol measurements at each study visit grouped by treatment. ") %>%
+  kableExtra::kable_classic()
+```
+
+(c) What are the possible sources of correlation/clustering in these data? Produce a variogram plot summarizing the dependence in the data as a function of study time. *Hint*: the R package `joineR` and function `to.unbalanced` may be especially helpful to you for reshaping the data.
+
+Ans: the possible sources of correlation are (a) within participant and (b) over study time. Variogram shown below.
+
+```{r}
+library(joineR)
+
+to_var = to.unbalanced(chol, id.col=c(2), times=c(0, 6, 12, 20, 24), Y.col=3:7, other.col=1)
+
+colnames(to_var)[3]<-"Y"
+
+vgm <- joineR::variogram(indv=to_var[,1], time=to_var[,2], Y=to_var[,3])
+
+plot(vgm, smooth=T)
+```
+
+(d) Based on the shape of the variogram, what random effect(s) do you think will account for the majority of correlation/dependence in these data? *Hint: refer to slide 59 of Module 2 for a reminder of how to interpret a variogram.*
+
+Ans: the variogram shows a flat trend, indicating very little serial dependence in the data and minimal correlation over time. The gap between total variance and the variance explained by residuals suggests that a random intercept linear mixed model would suffice to account for the majority of dependence in the data.
+
+(e) Fit an appropriate statistical model to evaluate whether the mean cholesterol profiles differ between treatment groups. Please state the null hypothesis you are testing and provide an appropriate interpretation of the test. *Note*: the random effects structure you choose should take into account the result of part (d). *Hint*: consider the "assume parallel profiles, test same level" null hypothesis in this question. *Hint 2*: after running lme, you can access the coefficients and t-test results using `summary(model)$tTable` command.
+
+```{r}
+
+to_var$group<-factor(to_var$group, levels=c(2,1))
+
+model<-nlme::lme(Y~factor(time)+group, data=to_var,  method = "REML",
+            random = reStruct( ~ 1 | id, pdClass="pdSymm", REML=T), na.action="na.omit")
+
+knitr::kable(signif(summary(model)$tTable,3)) %>% kableExtra::kable_classic()
+```
+
+Ans: We wish to test the null hypothesis that the mean cholesterol profiles are the same between the two treatment groups (under the assumption that the two profiles are parallel). This is equivalent to testing whether beta parameter on the main effect for group is significantly different from 0. To evaluate this hypothesis, we fit a linear mixed model with a main effect for treatment, a main effect for time as a categorical factor to avoid assuming a functional form on time, and a random intercept for each participant. We fit the model using REML and tested H0 using a t-test. We estimated that membership in treatment was associated with an average -1.68 mg/dL lower level of cholesterol. This result was not statistically significant (t-test p-val = 0.8). Hence, we fail to reject the null hypothesis that the cholesterol profiles were the same between treatment groups.
+
+
+# Question 2  
+
+The Framingham study is one of the well known long term follow-up study to identify the relationship between various risk factors and diseases and to characterize the natural history of the chronic circulatory disease process. The data on various aspects have been and continue to be collected every two years on a cohort of individuals. It began in 1948 in Framingham, located 21 miles west of Boston, with limited goals of investigating the serum cholesterol, smoking and elevated blood pressure as the risk factors of coronary heart disease. Over the years its goal has been greatly expanded to aid in understanding the numerous etiological factors of various diseases.  
+
+The data framingham.dat is a subset of a large data base collected in the Framingham study over years. There are 12 columns in the data file. The 1st column gives the age of the individual when they entered the study. The 2nd column provides the gender of the individual( 1-male, 2-female); the 3rd and 4th columns provide body mass index (BMI) at the baseline and at 10 years from the baseline respectively; the 5th column provides the number of cigarettes per day the individual smoked at the baseline. The columns 6 – 11 provide serum cholesterol levels at the baseline(enrollment) and then every two years through year 10. The column 12 indicates whether the individual is alive(0) or dead(1) at the end of 30 years since enrollment. That is, the data set excludes those who died during the 10 year data collection period. -9 indicates the missing data. Note that you have to convert -9 to NA or empty entries before you do any analysis.  
+
+a. Please read in the data and name each column by "age0", "gender", "bmi0", "bmi10", "cigarette",
+"chol_0", "chol_2", "chol_4", "chol_6", "chol_8","chol_10", "death". Use row number to create a new column called "id". Covert the data from wide table into long table.   Please convert -9 to NA in your dataframe and remove all observations containing NA. Use `head()` function to print the first 6 rows to show your result.  *Hint*: use `read.table` with manually enter column names by col.names option.  Use `complete.case` function to remove missing observations.
+
+```{r}
+dat = read.table("./framingham.dat", col.names = c("age0", "gender", "bmi0", "bmi10", "cigarette",
+"chol_0", "chol_2", "chol_4", "chol_6", "chol_8",
+"chol_10", "death"))
+
+dat$id = 1:nrow(dat)
+
+dat.long = dat %>%
+  pivot_longer(cols = c("chol_0", "chol_2", "chol_4", "chol_6", "chol_8","chol_10"), 
+               names_to = "time",
+               names_prefix = "chol_",
+               values_to = "chol") 
+
+dat.long[dat.long == -9] = NA
+dat.long = dat.long[complete.cases(dat.long),]
+
+head(dat.long)
+
+```
+
+
+b. Please make a Spaghetti plot of the cholesterol level over time for first 100 subjects. Please label the x-axis using study time.(eg: Baseline, Year2, Year4, etc) What conclusion could you draw from the plot(Whether the pattern of each subject is similar to each other)?  
+
+```{r}
+dat.long$time = as.numeric(dat.long$time)
+
+ggplot(data = dat.long[dat.long$id %in% seq(1:100),] ,aes(x = time, y = chol, group = id)) +
+  geom_line() + scale_x_continuous(breaks = c(0, 2, 4, 6, 8, 10), 
+                                   labels = c("Baseline", "Year 2", "Year 4", "Year 6", "Year 8", "Year 10"))+
+  theme(plot.title = element_text(size = 10, face = "bold", hjust = 0.5))+
+  labs(title = 'Spaghetti plot')
+```
+
+Ans: The pattern of subjects are different from each other. Therefore we may consider a model with random intercept and random slope for time.  
+
+
+c. Suppose we are interested in how cholesterol level changes over time and how it is related to baseline age, gender, and baseline BMI (without interaction between the variables). Please fit three models with different correlation structure: (i) with random intercept only, (ii) with random intercept and slope (with correlated random effects) and (iii) with random intercepts, exponential correlation with measurement error model. For each model, please provide output estimate, se, p value for coefficients of age0, gender, bmi0 and time. Please keep the result to three decimal places.
+
+
+
+```{r}
+mod0 = lme(chol ~ age0 + gender + bmi0 + time ,
+           method = "ML", data = dat.long,
+           random = reStruct( ~ 1 | id, pdClass="pdDiag", REML=F)  )
+
+knitr::kable(round(summary(mod0)$tTable[-1,c(1,2,5)], 3))
+
+mod1 = lme(chol ~ age0 + gender + bmi0 + time,
+               method = "ML", data = dat.long,
+               random = reStruct( ~ 1 +time| id, pdClass="pdSymm", REML=F) )
+
+knitr::kable(round(summary(mod1)$tTable[-1,c(1,2,5)], 3))
+
+mod2 = lme(chol ~ age0 + gender + bmi0 + time,
+               method = "ML", data = dat.long,
+               random = reStruct( ~ 1 | id, pdClass="pdDiag", REML=F),
+               correlation = corExp(form = ~ time | id, nugget=T) )
+
+knitr::kable(round(summary(mod2)$tTable[-1,c(1,2,5)], 3))
+```
+
+
+d.  Please use Variogram to determine if there is residual serial correlation that is not captured by the fitted models in 2c? (Hint: When you plot Variogram, pay attention to range in y axis, you may need to adjust ylim instead of using default setting of `plot()` function. Also the smoothing estimate does not work because there are few data points, so you need to use smooth=F option)  What can you conclude from the plots? 
+
+```{r}
+plot(Variogram(mod0, form = ~time|id, resType="normalized"), ylim = c(0,1.5), smooth=F)
+plot(Variogram(mod1, form = ~time|id, resType="normalized"), ylim = c(0,1.2), smooth=F)
+plot(Variogram(mod2, form = ~time|id, resType="normalized"), ylim = c(0,1.2), smooth=F)
+
+```
+
+Ans: The variogram for the random intercept model has an increasing trend, meaning that there is remaining correlation that decreases over observations with increasing measurement times.  Both random intercept and random slope model and exponential correlation model slightly over-correct the serial correlation for observations 8 and 10 years apart, with the exponential correlation model has a slightly better fit.
+
+
