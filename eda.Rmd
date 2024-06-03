@@ -17,6 +17,13 @@ rm(list = ls())
 library(tidyverse)
 library(knitr)
 library(rigr)
+library(geepack)
+library(lme4)
+
+# color selection
+colors <- c("#FC600A", # dark orange
+            "#C21460", # dark pink
+            "#3F0000") # darker red
 ```
 
 ```{r data-loading}
@@ -398,8 +405,9 @@ gg2c.weight.age
 gg3.age.order <- birthwt %>%
   ggplot(aes(x = birth.order, y = maternal.age, group = birth.order, 
              color = birth.order)) +
-    geom_boxplot(outlier.shape = NA) + 
-    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_jitter(width = 0.3, alpha = 0.2) +
+    geom_violin(alpha = 0.8) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.5) + 
     xlab("Birth order") + ylab("Maternal age (yr)") +
     theme_bw()
 
@@ -423,9 +431,11 @@ gg3.age.order + facet_wrap(vars(birth.weight.factor))
 ```{r task-4}
 gg4.weight.interval <- birthwt %>%
   filter(!is.na(interval)) %>%
-  ggplot(aes(x = interval, y = birth.weight, group = interval)) +
-    geom_boxplot(outlier.shape = NA) +
-    geom_jitter(width = 0.1, alpha = 0.2) +
+  ggplot(aes(x = interval, y = birth.weight, group = interval, 
+             color = as.factor(interval))) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    geom_violin() +
+    geom_boxplot(outlier.shape = NA, alpha = 0.8) +
     geom_hline(yintercept = 2500, color = "blue") +
     geom_hline(yintercept = 1500, color = "red") +
     xlab("Change in maternal age since last birth (yr)") + 
@@ -454,17 +464,42 @@ gg5.interval.order <- birthwt %>%
   filter(!is.na(interval)) %>%
   ggplot(aes(x = birth.order, y = interval, group = birth.order, 
              color = birth.order)) +
-    geom_boxplot(outlier.shape = NA, alpha = 0.1) +
-    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_jitter(width = 0.3, alpha = 0.5) +
+    geom_violin(alpha = 0.5) + 
+    geom_boxplot(outlier.shape = NA, alpha = 0.8) +
     xlab("Birth order") + ylab("Change in maternal age since last birth (yr)") +
     theme_bw()
 
 gg5.interval.order
+
+# table of counts
+table_bw_intv <- birthwt %>%
+  select(interval, birth.order) %>%
+  filter(!is.na(interval)) %>%
+  table()
+
+# table of percents
+round(table_bw_intv / nrow(table_bw_intv))
 ```
 (a) Stratify the plot by low / not low birth weight
 
 ```{r task-5a}
 gg5.interval.order + facet_wrap(vars(birth.weight.binary))
+
+# table of counts
+table_bw_intv_notlow <- birthwt %>%
+  filter(!is.na(interval) & birth.weight.binary == "Not low") %>%
+  select(interval, birth.order) %>%
+  table()
+
+table_bw_intv_low <- birthwt %>%
+  filter(!is.na(interval) & birth.weight.binary != "Not low") %>%
+  select(interval, birth.order) %>%
+  table()
+
+# table of percents
+round(table_bw_intv_notlow / nrow(table_bw_intv))
+round(table_bw_intv_low / nrow(table_bw_intv))
 ```
 
 (b) Stratify the plot by very low / low / not low birth weight
@@ -480,8 +515,9 @@ gg6.interval.age <- birthwt %>%
   filter(!is.na(interval)) %>%
   ggplot(aes(x = interval, y = maternal.age, group = interval,
              color = as.factor(interval))) +
-    geom_boxplot(outlier.shape = NA) +
-    geom_jitter(width = 0.1, alpha = 0.2) +
+    geom_jitter(width = 0.2, alpha = 0.2) +
+    geom_violin(alpha = 0.5) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.8) +
     xlab("Change in maternal age since last birth (yr)") + 
     ylab("Maternal age (yr)") +
     theme_bw()
@@ -502,8 +538,41 @@ gg6.interval.age + facet_wrap(vars(birth.weight.factor))
 ### Spaghetti plots
 
 7. Produce a spaghetti plot of birth weights versus birth order, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
+
+```{r}
+# set.seed(540) # optional
+
+# produce a spaghetti plot of birth weight over time
+gg7 <- birthwt %>%
+  # plot repeated measures of birth weights
+  ggplot(aes(y = birth.weight, x = birth.order)) +
+    geom_line(aes(group = mother.id), alpha = 0.1, color = colors[1]) + 
+    geom_point(data = . %>% 
+                 group_by(birth.order) %>%
+                 summarize(mean = mean(birth.weight)),
+               aes(x = birth.order, y = mean), size = 2.5, color = colors[3]) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Change in maternal age since last birth (yr)") + 
+    ylab("Birth weight (g)") +
+    theme_bw()
+
+gg7
+```
+
 (a) Color the plot by age group
+
+```{r}
+gg7 + facet_wrap(vars(age.group))
+```
+
+
 (b) Color the plot by interval
+
+```{r}
+gg7 + facet_wrap(vars(interval))
+```
+
 
 
 8. Produce a spaghetti plot of birth weights versus maternal age, marking the threshold for low birth weight; include individual and overall averages. Does baseline birth weight seem to inform subsequent values?
@@ -512,14 +581,172 @@ gg6.interval.age + facet_wrap(vars(birth.weight.factor))
 
 9. Produce a spaghetti plot of percent in birth weight group versus maternal age. Repeat for number in birth weight group versus maternal age. Compare the two. Does the most common birth weight group change as mothers age?
 
+\pagebreak
 
 # Modeling
 
-## Modeling birth weight from interpregnancy interval (and more?)
+## Modeling birth weight
 
-Consider two response variables: birth weight, which is a continuous variable measured in grams, and low-weight birth, a binary indicator variable.
+#### Birth weight ~ Birth order * Maternal age
 
-1. Model birth weight using a linear mixed effects model and interpret its coefficients.
+```{r order-age}
+# Fixed intercept and random slope for each subject
+lmm_model_fixedint <- lme4::lmer(
+  birth.weight ~ as.numeric(birth.order) * maternal.age + (1 | mother.id),
+  data = birthwt)
+
+# Random intercept and random slope for each subject
+lmm_model <- lme4::lmer(
+  birth.weight ~ as.numeric(birth.order) * maternal.age + (as.numeric(birth.order) | mother.id),
+  data = birthwt)
+
+# Fit GEE model with independent working correlation structure
+gee_independent <- geepack::geeglm(
+  birth.weight ~ as.numeric(birth.order) * maternal.age, id = mother.id, 
+  data = birthwt, corstr = "independence")
+
+# Fit GEE model with exchangeable working correlation structure
+gee_exchangeable <- geepack::geeglm(
+  birth.weight ~ as.numeric(birth.order) * maternal.age, id = mother.id, 
+  data = birthwt, corstr = "exchangeable")
+
+# Fit GEE model with AR(1) working correlation structure
+gee_ar1 <- geeglm(
+  birth.weight ~ as.numeric(birth.order) * maternal.age, id = mother.id, 
+  data = birthwt, corstr = "ar1")
+
+# Summary of the models
+cbind(
+  lmm_model_fixedint %>% summary %>% coef %>% data.frame %>%
+    select(LMM.fixedint = Estimate, SE = Std..Error),
+  lmm_model %>% summary %>% coef %>% data.frame %>%
+    select(LMM = Estimate, SE = Std..Error),
+  gee_independent %>% summary %>% coef %>% 
+    select(GEE.indp = Estimate, SE = Std.err),
+  gee_exchangeable %>% summary %>% coef %>% 
+    select(GEE.exch = Estimate, SE = Std.err)) %>%
+  # pretty print
+  kable(digits = 3, 
+        caption = "Coefficient estimates and corresponding standard errors")
+```
+```{r diagnostics-order-age}
+```
+
+#### Birth weight ~ Interbirth interval * Maternal age
+
+```{r interval-age}
+# Fixed intercept and random slope for each subject
+lmm_model_fixedint <- lme4::lmer(
+  birth.weight ~ interval * maternal.age + (1 | mother.id),
+  data = birthwt %>% na.omit)
+
+# Random intercept and random slope for each subject
+lmm_model <- lme4::lmer(
+  birth.weight ~ interval * maternal.age + (as.numeric(birth.order) | mother.id),
+  data = birthwt %>% na.omit)
+
+# Fit GEE model with independent working correlation structure
+gee_independent <- geepack::geeglm(
+  birth.weight ~ interval * maternal.age, id = mother.id, 
+  data = birthwt %>% na.omit, corstr = "independence")
+
+# Fit GEE model with exchangeable working correlation structure
+gee_exchangeable <- geeglm(
+  birth.weight ~ interval * maternal.age, id = mother.id, 
+  data = birthwt %>% na.omit, corstr = "exchangeable")
+
+# Fit GEE model with AR(1) working correlation structure
+gee_ar1 <- geeglm(
+  birth.weight ~ interval * maternal.age, id = mother.id, 
+  data = birthwt %>% na.omit, corstr = "ar1")
+
+# Summary of the models
+cbind(
+  lmm_model_fixedint %>% summary %>% coef %>% data.frame %>%
+    select(LMM.fixedint = Estimate, SE = Std..Error),
+  lmm_model %>% summary %>% coef %>% data.frame %>%
+    select(LMM = Estimate, SE = Std..Error),
+  gee_independent %>% summary %>% coef %>% 
+    select(GEE.indp = Estimate, SE = Std.err),
+  gee_exchangeable %>% summary %>% coef %>% 
+    select(GEE.exch = Estimate, SE = Std.err)) %>%
+  # pretty print
+  kable(digits = 3, 
+        caption = "Coefficient estimates and corresponding standard errors")
+```
+```{r diagnostics-interval-age}
+```
+
+#### Birth weight ~ Interbirth interval + Birth order + Maternal age
+
+```{r interval-order-age}
+# Fixed intercept and random slope for each subject
+lmm_model_fixedint <- lme4::lmer(
+  birth.weight ~ interval + maternal.age + as.numeric(birth.order) + (1 | mother.id),
+  data = birthwt %>% na.omit)
+
+# Random intercept and random slope for each subject
+lmm_model <- lme4::lmer(
+  birth.weight ~ interval + maternal.age + as.numeric(birth.order) +  (as.numeric(birth.order) | mother.id),
+  data = birthwt %>% na.omit)
+
+# Fit GEE model with independent working correlation structure
+gee_independent <- geepack::geeglm(
+  birth.weight ~ interval + maternal.age + as.numeric(birth.order), 
+  id = mother.id, data = birthwt %>% na.omit, corstr = "independence")
+
+# Fit GEE model with exchangeable working correlation structure
+gee_exchangeable <- geeglm(
+  birth.weight ~ interval + maternal.age + as.numeric(birth.order), 
+  id = mother.id, data = birthwt %>% na.omit, corstr = "exchangeable")
+
+# Fit GEE model with AR(1) working correlation structure
+gee_ar1 <- geeglm(
+  birth.weight ~ interval + maternal.age + as.numeric(birth.order), 
+  id = mother.id, data = birthwt %>% na.omit, corstr = "ar1")
+
+# Summary of the models
+cbind(
+  lmm_model_fixedint %>% summary %>% coef %>% data.frame %>%
+    select(LMM.fixedint = Estimate, SE = Std..Error),
+  lmm_model %>% summary %>% coef %>% data.frame %>%
+    select(LMM = Estimate, SE = Std..Error),
+  gee_independent %>% summary %>% coef %>% 
+    select(GEE.indp = Estimate, SE = Std.err),
+  gee_exchangeable %>% summary %>% coef %>% 
+    select(GEE.exch = Estimate, SE = Std.err)) %>%
+  # pretty print
+  kable(digits = 3, 
+        caption = "Coefficient estimates and corresponding standard errors")
+```
+```{r diagnostics-interval-age-order}
+```
+
+\pagebreak
+
+## Modeling log odds of low birth weight
+
+```{r}
+birthwt <- birthwt %>%
+  mutate(birth.weight.binary <- ifelse(birth.weight.binary == "Not low", 0, 1))
+
+# Fit GLMM to model log odds of low birth weight 
+glmm_model <- lme4::glmer(
+  birth.weight.binary ~ maternal.age + interval + as.numeric(birth.order) + 
+    (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+round(glmm_model %>% summary %>% coef, 3)
+
+
+glmm_model <- lme4::glmer(
+  birth.weight.binary ~ maternal.age + interval + 
+    (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+round(glmm_model %>% summary %>% coef, 3)
+```
+\pagebreak
 
 2. Model birth weight using a linear fixed effects model and interpret its coefficients.
 
