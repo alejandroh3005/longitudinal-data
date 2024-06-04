@@ -1,0 +1,437 @@
+---
+title: "Georgia Birth Weight Modeling"
+author: "Alejandro Hernandez"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 999)
+# clear workspace
+rm(list = ls())
+
+# load relevant libraries
+library(tidyverse)
+library(knitr)
+library(rigr)
+library(geepack)
+library(lme4)
+library(nlme)
+
+
+# color selection
+colors <- c("#FC600A", # dark orange
+            "#C21460", # dark pink
+            "#3F0000") # darker red
+```
+
+```{r data-loading}
+birthwt <- read.csv("data/cdc birthwt.csv")
+
+names(birthwt) <- c("mother.id", "birth.order", "birth.weight", "maternal.age", "child.id")
+
+birthwt <- birthwt %>%
+  # create birth weight binary factor
+  mutate(birth.weight.binary = ifelse(birth.weight < 2500, 1, 0)) %>%
+  # create a interpregnancy variable
+  arrange(mother.id, birth.order) %>%
+  group_by(mother.id) %>%
+  mutate(interval = maternal.age - lag(maternal.age)) %>%
+  ungroup
+
+birthwt %>% filter(interval < 0)
+# mothers 57939 and 212988 both have negative intervals for their third births
+# we will remove all their data and do not expect measurable changes in future 
+# analysis, their data is not special among the sample
+birthwt <- birthwt %>% filter(!mother.id %in% c(57939, 212988))
+```
+
+### Modeling correlation
+
+```{r model-correlation, echo=FALSE}
+# produce a spaghetti plot of birth weight over maternal age
+birthwt %>%
+  ggplot(aes(y = birth.weight, x = maternal.age)) +
+    geom_line(aes(group = mother.id), alpha = 0.3, color = colors[1]) + 
+    geom_smooth(method = "loess", se = F, color = colors[3], lwd =  0.75) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Maternal age (yr)") + 
+    ylab("Birth weight (g)") +
+    theme_bw()
+
+# produce a spaghetti plot of birth weight over birth order
+birthwt %>%
+  ggplot(aes(y = birth.weight, x = birth.order)) +
+    geom_line(aes(group = mother.id), alpha = 0.3, color = colors[1]) + 
+    geom_point(data = . %>% group_by(birth.order) %>% 
+                 summarize(mean = mean(birth.weight)),
+               aes(x = birth.order, y = mean), size = 2.5, color = colors[3]) +
+    geom_hline(yintercept = 2500, color = "blue") +
+    geom_hline(yintercept = 1500, color = "red") +
+    xlab("Birth order") + 
+    ylab("Birth weight (g)") +
+    theme_bw()
+
+# Autocorrelation function
+acf(birthwt$birth.weight)
+```
+
+We presume that average population effects on birth weight will be well-modeled by a generalized estimating equation (GEE) model with a auto-regressive correlation structure, based on the decaying pattern of the ACF graph above.
+
+For the same reason, we expect the individual-specific effects on birth weight to be well-modeled by a linear mixed-effects model (LMM) that also assumes an auto-regressive correlation structure.
+
+We elect to fit many LMM and GEE models, assuming various correlation structures. We expect to report coefficients and performance diagnostics for four models:
+
+-   
+
+    (1) LMM with no covariates, random intercept and fixed slope, and no assumed correlation structure.
+
+-   
+
+    (3) LMM with covariate for birth order, random intercept and fixed slope, and assumed auto-regressive correlation structure.
+
+-   
+
+    (4) GEE with no predictors and auto-regressive working correlation structure.
+
+-   
+
+    (5) GEE with covariate for birth order and auto-regressive working correlation structure.
+
+### Modeling birth weight
+
+```{r lmm-models, error=TRUE}
+#### Linear Mixed-Effects Models ####
+# Random intercept, fixed slope; No covariates
+lmm0 <- nlme::lme(birth.weight ~ maternal.age, 
+            random = ~ 1 | mother.id, 
+            data = birthwt)
+
+# Random intercept, fixed slope; with birth order covariate
+lmm1 <- lme(birth.weight ~ maternal.age + birth.order,
+            random = ~ 1 | mother.id, 
+            data = birthwt)
+
+# Random intercept and slope; with birth order covariate
+lmm2 <- lme(birth.weight ~ maternal.age + birth.order,
+            random = ~ maternal.age | mother.id, 
+            data = birthwt)
+
+# Random intercept and fixed slope; with birth order covariate and auto-regressive correlation structure
+lmm3 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ 1 | mother.id, correlation = corAR1(), 
+            data = birthwt)
+
+# Random intercept and slope; with birth order covariate and auto-regressive correlation structure
+# WILL NOT COMPLETE; DOES NOT CONVERGE
+lmm4 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ maternal.age | mother.id, correlation = corAR1(), 
+            data = birthwt)
+
+# Random intercept and slope; with birth order covariate and exchangeable 
+# correlation structure
+lmm5 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ maternal.age | mother.id, correlation = corCompSymm(), 
+            data = birthwt)
+
+# Random intercept and fixed slope; with birth order covariate and exponential 
+# correlation structure
+lmm6 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ 1 | mother.id, correlation = corExp(), 
+            data = birthwt)
+
+# Random intercept and slope; with birth order covariate and exponential 
+# correlation structure
+# WILL NOT COMPLETE; DOES NOT CONVERGE
+lmm7 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ maternal.age | mother.id, correlation = corExp(), 
+            data = birthwt)
+```
+
+```{r gee-models}
+#### Generalized Estimating Equations ####
+
+# Auto-regressive correlation structures assume that the correlation between
+# observations decreases as the time between them increases
+gee0 <- geepack::geeglm(birth.weight ~ maternal.age, id = mother.id,
+               corstr = "ar1", data = birthwt)
+
+gee1 <- geeglm(birth.weight ~ maternal.age + birth.order, id = mother.id, 
+               corstr = "ar1", data = birthwt)
+
+# Exchangeable correlation structures assume that all pairs of observations 
+# within a subject have the same correlation, regardless of the time interval 
+# between them
+gee2 <- geeglm(birth.weight ~ maternal.age, id = mother.id,
+               corstr = "exchangeable", data = birthwt)
+
+gee3 <- geeglm(birth.weight ~ maternal.age + birth.order, id = mother.id, 
+               corstr = "exchangeable", data = birthwt)
+
+# Independent correlation structures assume that all measurements within a 
+# subject are uncorrelated
+gee4 <- geeglm(birth.weight ~ maternal.age, id = mother.id,
+               corstr = "independence", data = birthwt)
+
+gee5 <- geeglm(birth.weight ~ maternal.age + birth.order, id = mother.id, 
+               corstr = "independence", data = birthwt)
+```
+
+# Diagnostics
+
+```{r lmm-diagnostics, echo=FALSE}
+## Diagnostics for LMM models of birth weight
+# exclude models 4 and 7, they did not converge
+
+# AIC (relative goodness of fit)
+print("AIC scores, a measure of relative goodness of fit")
+AIC(lmm0, lmm1, lmm2, lmm3, lmm5, lmm6) %>% arrange(AIC)
+
+# Variance and correlation components
+print("Variance/correlation of LMM Model 0")
+lmm0 %>% VarCorr
+print("Variance/correlation of LMM Model 1")
+lmm1 %>% VarCorr
+print("Variance/correlation of LMM Model 2")
+lmm2 %>% VarCorr
+print("Variance/correlation of LMM Model 3")
+lmm3 %>% VarCorr
+print("Variance/correlation of LMM Model 5")
+lmm5 %>% VarCorr
+print("Variance/correlation of LMM Model 6")
+lmm6 %>% VarCorr
+
+# Residual plot
+ggplot(mapping = aes(y = residuals(lmm0), x = fitted(lmm0))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 0")
+
+ggplot(mapping = aes(y = residuals(lmm1), x = fitted(lmm1))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 1")
+
+ggplot(mapping = aes(y = residuals(lmm2), x = fitted(lmm2))) +
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 2")
+
+ggplot(mapping = aes(y = residuals(lmm3), x = fitted(lmm3))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 3")
+
+ggplot(mapping = aes(y = residuals(lmm5), x = fitted(lmm5))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 5")
+
+ggplot(mapping = aes(y = residuals(lmm6), x = fitted(lmm6))) +
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "LMM 6")
+
+# QQ plot
+qqnorm(residuals(lmm0))
+qqline(residuals(lmm0))
+title(sub="Plot for LMM model 0")
+
+qqnorm(residuals(lmm1))
+qqline(residuals(lmm1))
+title(sub="Plot for LMM model 1")
+
+qqnorm(residuals(lmm2))
+qqline(residuals(lmm2))
+title(sub="Plot for LMM model 2")
+
+qqnorm(residuals(lmm3))
+qqline(residuals(lmm3))
+title(sub="Plot for LMM model 3")
+
+qqnorm(residuals(lmm5))
+qqline(residuals(lmm5))
+title(sub="Plot for LMM model 5")
+
+qqnorm(residuals(lmm6))
+qqline(residuals(lmm6))
+title(sub="Plot for LMM model 6")
+```
+
+```{r gee-diagnostics, echo=FALSE}
+## Diagnostics for GEE models of birth weight
+
+# Residual plot
+ggplot(mapping = aes(y = residuals(gee0), x = fitted(gee0))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 0")
+
+ggplot(mapping = aes(y = residuals(gee1), x = fitted(gee1))) +
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 1")
+
+ggplot(mapping = aes(y = residuals(gee2), x = fitted(gee2))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 2")
+
+ggplot(mapping = aes(y = residuals(gee3), x = fitted(gee3))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 3")
+
+ggplot(mapping = aes(y = residuals(gee4), x = fitted(gee4))) +
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 4")
+
+ggplot(mapping = aes(y = residuals(gee5), x = fitted(gee5))) + 
+  geom_point(alpha = 0.2) + geom_smooth() + labs(title = "GEE 5")
+
+# QQ plot
+qqnorm(residuals(gee0))
+qqline(residuals(gee0))
+title(sub="Plot for GEE model 0")
+
+qqnorm(residuals(gee1))
+qqline(residuals(gee1))
+title(sub="Plot for GEE model 1")
+
+qqnorm(residuals(gee2))
+qqline(residuals(gee2))
+title(sub="Plot for GEE model 2")
+
+qqnorm(residuals(gee3))
+qqline(residuals(gee3))
+title(sub="Plot for GEE model 3")
+
+qqnorm(residuals(gee4))
+qqline(residuals(gee4))
+title(sub="Plot for GEE model 4")
+
+qqnorm(residuals(gee5))
+qqline(residuals(gee5))
+title(sub="Plot for GEE model 5")
+```
+
+# Results
+
+```{r lmm-results, echo=FALSE}
+# Summary for all results
+# lmm0 %>% summary %>% coef
+# lmm1 %>% summary %>% coef
+# lmm2 %>% summary %>% coef
+# lmm3 %>% summary %>% coef
+# lmm5 %>% summary %>% coef
+# lmm6 %>% summary %>% coef
+
+# Table of reported results
+# Report LMMs 0 and 3
+lmm0_res <- lmm0 %>% summary %>% coef %>% data.frame %>% 
+  mutate(CI.lower = Value - Std.Error, CI.upper = Value + Std.Error)
+
+lmm3_res <- lmm3 %>% summary %>% coef %>% data.frame %>%
+  mutate(CI.lower = Value - Std.Error, CI.upper = Value + Std.Error)
+
+lmm_res <- rbind(lmm0_res, lmm3_res)[-c(1,3),] # ignore intercept coefficients
+lmm_res$Model <- c("Mixed", "Mixed + Birth order + Autoreg", "")
+lmm_res$Effect <- c("Maternal age", "Maternal age", "Birth order")
+# Rename coefficients
+lmm_res %>% 
+  select(Model, Effect, Estimate = Value, CI.lower, CI.upper) %>%
+  knitr::kable(row.names = FALSE, digits = 3, 
+               caption = "Linear mixed-effects model results")
+```
+
+All the LMM models agreed with one another, except for Model 0 (first row of table above) which estimated a weaker effect from maternal age than the others.
+
+Recall,
+
+```         
+# Random intercept, fixed slope; No covariates
+lmm0 <- nlme::lme(birth.weight ~ maternal.age, 
+            random = ~ 1 | mother.id, 
+            data = birthwt)
+
+# Random intercept and fixed slope; with birth order covariate and auto-regressive
+# correlation structure
+lmm3 <- lme(birth.weight ~ maternal.age + birth.order, 
+            random = ~ 1 | mother.id, correlation = corAR1(), 
+            data = birthwt)
+```
+
+```{r gee-results, echo=FALSE}
+# Summary for all results
+# gee0 %>% summary %>% coef
+# gee1 %>% summary %>% coef
+# gee2 %>% summary %>% coef
+# gee3 %>% summary %>% coef
+# gee4 %>% summary %>% coef
+# gee5 %>% summary %>% coef
+
+# Table of reported results
+# Report GEEs 0 and 1
+gee0_res <- gee0 %>% summary %>% coef %>% data.frame %>% 
+  mutate(CI.lower = Estimate + Std.err, CI.upper = Estimate + Std.err)
+
+gee1_res <- gee1 %>% summary %>% coef %>% data.frame %>%
+  mutate(CI.lower = Estimate + Std.err, CI.upper = Estimate + Std.err)
+
+
+gee_res <- rbind(gee0_res, gee1_res)[-c(1,3),] # ignore intercept coefficients
+gee_res$Model <- c("Autoregressive", "Autoregressive + Birth order", "")
+gee_res$Effect <- c("Maternal age", "Maternal age", "Birth order")
+gee_res %>% 
+  select(Model, Effect, Estimate, CI.lower, CI.upper) %>%
+  knitr::kable(row.names = FALSE, digits = 3, 
+               caption = "Generalized estimating equations results")
+```
+
+All the GEE models agree that adding a covariate increases the effects of age (by about 7 units). However, the other GEE models estimate different effects (I think they'll all higher). The ACF plot in the beginning convinced me that assuming auto-regressive and temporal decay of correlation is something we should stick to.
+
+\pagebreak
+
+# Modeling log odds of low birth weight
+
+NOTE I AM ASSUMING THIS IS THE CORRECT WAY TO INTERPRET GLMM'S AS SIMILAR TO LOGISTIC REGRESSION; I REALIZE NOW I MAY HAVE BEEN WRONG PLEASE VERIFY
+
+```{r}
+# Generalized linear mixed-effects models (GLMM) to model log odds of low birth
+# weight 
+glmm0 <- lme4::glmer(
+  birth.weight.binary ~ maternal.age + (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+glmm1 <- glmer(
+  birth.weight.binary ~ maternal.age + interval + (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+glmm2 <- glmer(
+  birth.weight.binary ~ maternal.age + birth.order + (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+glmm3 <- glmer(
+  birth.weight.binary ~ maternal.age + interval + birth.order + (1 | mother.id),
+  data = birthwt %>% na.omit, family = binomial)
+
+# Summary for all results
+glmm0_res <- glmm0 %>% summary %>% coef %>% data.frame %>%
+    mutate(CI.lower = Estimate + Std..Error, CI.upper = Estimate + Std..Error)
+
+glmm1_res <- glmm1 %>% summary %>% coef %>% data.frame %>%
+    mutate(CI.lower = Estimate + Std..Error, CI.upper = Estimate + Std..Error)
+
+glmm2_res <- glmm2 %>% summary %>% coef %>% data.frame %>%
+    mutate(CI.lower = Estimate + Std..Error, CI.upper = Estimate + Std..Error)
+
+glmm3_res <- glmm3 %>% summary %>% coef %>% data.frame %>%
+    mutate(CI.lower = Estimate + Std..Error, CI.upper = Estimate + Std..Error)
+
+# Table for all results
+gee_res <- rbind(glmm0_res, glmm1_res, glmm2_res, glmm3_res)[-c(1,3,6,9),] %>%
+  exp %>% select("exp(Estimate)" = Estimate, CI.lower, CI.upper)
+gee_res$Model <- c("A", 
+                   "B", "",
+                   "C", "",
+                   "D", "", "")
+gee_res$Effect <- c(
+  "Maternal age",
+  "Maternal age", "Interval",
+  "Maternal age", "Birth order",
+  "Maternal age", "Interval", "Birth order")
+
+gee_res %>% 
+  select(Model, Effect, everything()) %>%
+  knitr::kable(row.names = FALSE, digits = 3, 
+               caption = "Generalized linear mixed-effects results")
+```
+
+Exp(Estimates) is on the odds scale, please verify that if an effect's 95% CI covers 1, the we cannot conclude it has significant effect.
+
+I don't know how to compare models through diagnostics yet.
+
+**End of document.**

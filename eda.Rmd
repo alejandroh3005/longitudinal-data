@@ -553,7 +553,7 @@ gg7 <- birthwt %>%
                aes(x = birth.order, y = mean), size = 2.5, color = colors[3]) +
     geom_hline(yintercept = 2500, color = "blue") +
     geom_hline(yintercept = 1500, color = "red") +
-    xlab("Change in maternal age since last birth (yr)") + 
+    xlab("Birth order") + 
     ylab("Birth weight (g)") +
     theme_bw()
 
