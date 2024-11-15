@@ -1,0 +1,147 @@
+---
+title: "Getting started with generalized estimating equations"
+subtitle: Department of Biostatistics @ University of Washington
+author: "Alejandro Hernandez"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+Reference: [Getting Started with Generalized Estimating Equations, University of Virginia](https://library.virginia.edu/data/articles/getting-started-with-generalized-estimating-equations)
+
+```{r}
+URL <- "http://static.lib.virginia.edu/statlab/materials/data/depression.csv"
+dat <- read.csv(URL, stringsAsFactors = TRUE)
+dat$id <- factor(dat$id)
+dat$drug <- relevel(dat$drug, ref = "standard")
+head(dat, n = 3)
+```
+
+```{r}
+# install.packages("magrittr")
+library(magrittr)
+with(dat, tapply(depression, list(diagnose, drug, time), mean)) %>% 
+  ftable() %>% 
+  round(2)
+```
+```{r}
+# install.packages("geepack")
+library(geepack)
+library(broom)
+library(dplyr)
+dep_gee <- geepack::geeglm(depression ~ diagnose + drug * time,
+                           data = dat,
+                           id = id,
+                           family = binomial,
+                           corstr = "independence")
+summary(dep_gee)
+
+broom::tidy(dep_gee) %>% dplyr::rename(OR = estimate)
+
+# install.packages("gee")
+library(gee)
+dep_gee <- gee::gee(depression ~ diagnose + drug * time,
+                    data = dat,
+                    id = id,
+                    family = binomial,
+                    corstr = "independence")
+summary(dep_gee)
+```
+
+```{r}
+# library(geepack)
+dep_gee <- geepack::geeglm(depression ~ diagnose + drug * time,
+                           data = dat,
+                           id = id,
+                           family = binomial,
+                           corstr = "exchangeable")
+summary(dep_gee)
+
+# library(gee)
+dep_gee <- gee::gee(depression ~ diagnose + drug * time,
+                    data = dat,
+                    id = id,
+                    family = binomial,
+                    corstr = "exchangeable")
+summary(dep_gee)
+```
+
+```{r}
+# library(geepack)
+dep_gee <- geepack::geeglm(depression ~ diagnose + drug * time,
+                           data = dat,
+                           id = id,
+                           family = binomial,
+                           corstr = "ar1")
+summary(dep_gee)
+
+# library(gee)
+dep_gee <- gee::gee(depression ~ diagnose + drug * time,
+                    data = dat,
+                    id = id,
+                    family = binomial,
+                    corstr = "AR-M", Mv = 1)
+summary(dep_gee)
+```
+
+```{r}
+# install.packages("lme4)
+library(lme4)
+dep_glmer <- glmer(depression ~ diagnose + drug*time + (1|id),
+                   data = dat, family = binomial)
+summary(dep_glmer, corr = FALSE)
+coef(dep_glmer)$id$'(Intercept)' %>% unique() %>% length()
+```
+
+```{r}
+#### --- GEE --- ####
+library(ggeffects)
+library(ggplot2)
+
+dep_geepack <- geepack::geeglm(depression ~ diagnose + drug * time,
+                               data = dat, 
+                               id = id, 
+                               family = binomial, 
+                               corstr = "exchangeable")
+
+marginal_effects <- ggeffects::ggemmeans(dep_geepack,
+                                         terms = c("time", "drug"),
+                                         condition = c(diagnose = "severe"))
+
+plot(marginal_effects) + ggplot2::ggtitle("GEE Effect plot")
+
+# -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -
+library(emmeans)
+dep_gee <- gee::gee(depression ~ diagnose + drug * time,
+                    data = dat, 
+                    id = id, 
+                    family = binomial, 
+                    corstr = "exchangeable")
+marginal_effects <- emmeans(dep_gee, 
+                            specs = c("time", "drug"),
+                            at = list(diagnose = "severe"),
+                            cov.keep = "time", 
+                            regrid = "response")
+emm_out <- data.frame(marginal_effects)
+
+ggplot(emm_out) +
+  aes(x = time, y = prob, color = drug, fill = drug) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower.CL, ymax = upper.CL, 
+                  color = NULL), alpha = 0.15) +
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1", guide = NULL) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_ggeffects() +
+  labs(title = "GEE Effect plot", y = "depression")
+
+#### --- GLMM --- ####
+
+# library(ggeffects)
+marginal_effects <- ggeffects::ggemmeans(dep_glmer,
+                                        terms = c("time", "drug"),
+                                        condition = c(diagnose = "severe"))
+plot(marginal_effects) + ggplot2::ggtitle("GLMER Effect plot")
+```
+
+
+

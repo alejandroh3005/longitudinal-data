@@ -50,6 +50,31 @@ birthwt <- birthwt %>% filter(!mother.id %in% c(57939, 212988))
 ```
 
 ### Modeling correlation
+```{r}
+
+data = birthwt
+outcome = "birth.weight"
+time = "maternal.age"
+id = "mother.id"
+
+
+plot_data <- data %>% 
+  select(ID = id, Outcome = outcome, Time = time) %>%
+  na.omit
+
+# produce a spaghetti plot of birth weight over maternal age
+ggplot(data = plot_data, mapping = aes(y = Outcome, x = Time)) + 
+  geom_line(aes(group = ID), alpha = 0.3, color = colors[1])
+  
+  
+  
+  geom_line(aes(group = data$id), alpha = 0.3, color = colors[1]) + 
+  geom_smooth(method = "loess", se = F, color = colors[3], lwd =  0.75, na.rm = TRUE) +
+  theme_bw()
+
+gg
+
+```
 
 ```{r model-correlation, echo=FALSE}
 # produce a spaghetti plot of birth weight over maternal age
@@ -356,16 +381,21 @@ lmm3 <- lme(birth.weight ~ maternal.age + birth.order,
 # Table of reported results
 # Report GEEs 0 and 1
 gee0_res <- gee0 %>% summary %>% coef %>% data.frame %>% 
-  mutate(CI.lower = Estimate + Std.err, CI.upper = Estimate + Std.err)
+  mutate(CI.lower = Estimate - Std.err, CI.upper = Estimate + Std.err)
 
 gee1_res <- gee1 %>% summary %>% coef %>% data.frame %>%
-  mutate(CI.lower = Estimate + Std.err, CI.upper = Estimate + Std.err)
+  mutate(CI.lower = Estimate - Std.err, CI.upper = Estimate + Std.err)
 
 
 gee_res <- rbind(gee0_res, gee1_res)[-c(1,3),] # ignore intercept coefficients
 gee_res$Model <- c("Autoregressive", "Autoregressive + Birth order", "")
 gee_res$Effect <- c("Maternal age", "Maternal age", "Birth order")
 gee_res %>% 
+  select(Model, Effect, Estimate, CI.lower, CI.upper) %>%
+  knitr::kable(row.names = FALSE, digits = 3, 
+               caption = "Generalized estimating equations results")
+
+gee_res[-1,] %>% 
   select(Model, Effect, Estimate, CI.lower, CI.upper) %>%
   knitr::kable(row.names = FALSE, digits = 3, 
                caption = "Generalized estimating equations results")
